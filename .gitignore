@@ -1,0 +1,129 @@
+# Python-specific ignores
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+
+# Django-specific ignores
+*.log
+*.pot
+*.py[cod]
+*.sqlite3
+*.pkl
+db.sqlite3
+db.sqlite3-journal
+
+## Ignore media files (you might want to track this in production)
+media/
+mediafiles/
+staticfiles/
+static/
+
+# Ignore local environment settings
+.env
+*.env
+.env.*
+
+# Ignore virtual environments
+env/
+venv/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# Ignore all coverage and test-related files
+.coverage
+htmlcov/
+*.cover
+*.py,cover
+.tox/
+.nox/
+coverage.xml
+nosetests.xml
+pytest_cache/
+cover/
+*.testoutput
+
+# Ignore IDE/editor files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+
+# Ignore MacOS-specific files
+.DS_Store
+
+# Ignore FastAPI auto-generated files (if any)
+__pycache__/
+instance/
+.webassets-cache
+*.mypy_cache/
+.mypy_cache/
+
+# Ignore build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Ignore pip specific files
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Ignore Docker-specific files
+*.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Ignore migrations files (optional, may want to track these)
+migrations
+*.log
+*.pot
+*.py[cod]
+
+# Ignore compiled code
+*.pyd
+
+# Ignore SQLite files
+*.sqlite3
+
+# Ignore VSCode settings
+.vscode/
+
+*.toml
+
+modules
+
+generated
+
+# Ignore Node.js dependencies (if you use Node.js for frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ignore pyenv
+.python-version
+
+# Ignore PyCharm settings
+.idea/
+
+# Ignore Jupyter Notebook checkpoints (if using Jupyter)
+.ipynb_checkpoints/
+
+# Ignore local and production configuration
+config/local.py
+config/settings_local.py
+config/settings_prod.py
+
+.gitlab-ci.yml
+
+config
+example-app.py

@@ -1,0 +1,43 @@
+
+from pydantic import BaseModel
+from typing import List, Optional
+
+
+import strawberry
+
+@strawberry.input
+class Filter:
+    field: str
+    value: str
+    comparator: str
+
+
+@strawberry.input
+class Search:
+    query: str
+    columns: List[str]
+    
+    
+@strawberry.input
+class Group:
+    field: str
+    format: Optional[str] = None
+    
+        
+@strawberry.input
+class GroupFunction:
+    field: str
+    function: str
+
+
+@strawberry.input
+class PaginationParams:
+    page: int
+    pageSize: int
+    sortBy: Optional[str] = "name"
+    sortOrder: Optional[str] = "asc"
+    groupBy: Optional[List[Group]] = None
+    groupFunctions: Optional[List[GroupFunction]] = None
+    search: Optional[Search] = None
+    filters: Optional[List[Filter]] = None
+
