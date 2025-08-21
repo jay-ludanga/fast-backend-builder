@@ -4,9 +4,9 @@ import contextvars
 
 from tortoise import Tortoise
 
-# from fast_api_builder.muarms.enums import HeadshipType
-from fast_api_builder.muarms.models import Headship
-from fast_api_builder.muarms.models.uaa import Permission, User, Group, HeadshipType, Student, Staff
+from fast_api_builder.models import HeadshipType
+from fast_api_builder.models.group_permissions import Group, Permission
+from fast_api_builder.utils.config import get_user_model
 
 # Context variables for request-specific auth data
 _user_ctx = contextvars.ContextVar("user_ctx", default=None)
@@ -16,7 +16,7 @@ _groups_ctx = contextvars.ContextVar("groups_ctx", default=None)
 _student_ctx = contextvars.ContextVar("student_ctx", default=None)
 _staff_ctx = contextvars.ContextVar("staff_ctx", default=None)
 
-
+User = get_user_model()
 class Auth:
     @classmethod
     async def init(cls, user_info: dict, user: User = None):
@@ -77,31 +77,7 @@ class Auth:
             _groups_ctx.set(groups)
         return "students" in groups
 
-    @classmethod
-    async def student(cls):
-        """Return the Student object for the user if they are student."""
-        student = _student_ctx.get()
-        if student is not None:
-            return student
-        user = await cls.user()
-        if not user:
-            return None
-        student = await Student.get_or_none(user=user)
-        _student_ctx.set(student)
-        return student
 
-    @classmethod
-    async def staff(cls):
-        """Return the Staff object for the user if they are staff."""
-        staff = _staff_ctx.get()
-        if staff is not None:
-            return staff
-        user = await cls.user()
-        if not user:
-            return None
-        staff = await Staff.get_or_none(user=user)
-        _staff_ctx.set(staff)
-        return staff
 
     @classmethod
     async def user_headships(cls, headship_type: HeadshipType):

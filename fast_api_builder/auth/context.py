@@ -10,8 +10,6 @@ from strawberry import Info
 from strawberry.extensions import FieldExtension
 from strawberry.fastapi import BaseContext
 from graphql import GraphQLError
-
-from fast_api_builder.muarms.models.uaa import Permission, User
 SESSION_EXPIRED_CODE = "SESSION_EXPIRED"
 
 # Custom GraphQL Context Class

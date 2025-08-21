@@ -6,11 +6,10 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from fast_api_builder.auth.auth import Auth
 from fast_api_builder.auth.jwt_handler import JWTHandler
-from fast_api_builder.auth.session_handler import SessionHandler
-from fast_api_builder.muarms.models import User
+from fast_api_builder.utils.config import get_user_model
 from fast_api_builder.utils.error_logging import log_exception
 
-
+User = get_user_model()
 class JWTMiddleware(BaseHTTPMiddleware):
     def __init__(self,
                  app,
@@ -58,51 +57,7 @@ class JWTMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         return response
     
-class SessionMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, secret_key, debug: bool = False):
-        super().__init__(app)
-        self.debug = debug
-        self.session_handler = SessionHandler()
-        self.jwt_handler = JWTHandler(
-            redis_cli=None, 
-            secret_key=secret_key,
-            reset_secret=''
-        )
 
-    async def dispatch(self, request: Request, call_next):
-        if token :=  request.headers.get('Authorization'):
-            try:
-                # Decode session_id and attach to request state
-                session_data = self.jwt_handler.get_data(token.split(' ')[1])
-                
-                if session_data.get('data') is None:
-                    request.state.user = None
-                    request.state.auth_error = session_data.get('error')
-                else:
-                    session_id = session_data['data']['session_id']
-                    exp = int(session_data['data']['exp'])
-                    user_data, user = await self.session_handler.get_data(session_id, exp)
-                    
-                    if user_data.get('data') is None:
-                        request.state.user = None
-                        request.state.auth_error = user_data.get('error')
-                    else:
-                        request.state.user = user_data.get('data')
-                        request.state.auth_error = user_data.get('error')
-
-                        await Auth.init(
-                            user_info=user_data.get('data'),
-                            user=user
-                        )
-            except Exception as e:
-                log_exception(e)
-                request.state.user = None
-                request.state.auth_error = str(e)
-        else:
-            request.state.user = None
-            request.state.auth_error = 'INVALID'
-            
-        return await call_next(request)
 
 
 def authorize(required_permissions: Optional[list] = None):

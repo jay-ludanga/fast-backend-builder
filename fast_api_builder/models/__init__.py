@@ -118,7 +118,7 @@ class HeadshipModel(models.Model):
         Returns:
             bool: True if a global headship is present, otherwise False.
         """
-        # from fast_api_builder.muarms.enums import HeadshipType
+
         return any(
             user_headship.headship_type == HeadshipType.GLOBAL.value
             for user_headship in user_headships if user_headship
@@ -216,6 +216,7 @@ class HeadshipModel(models.Model):
             list: A list of IDs for use in filtering related entities.
         """
         ids_query = model_headship['model'].filter(id=user_headship.headship_id)
+
         # If a path is defined, fetch related IDs
         if model_headship.get('path', None):
             # Filter out None values directly in the query
@@ -276,8 +277,9 @@ class HeadshipModel(models.Model):
         Returns:
             The query with a placeholder filter that returns no results.
         """
-        # Filter by a non-existent ID to ensure no results are returned
-        return query.filter(id=0)
+        import uuid
+        # Filter by a non-existent UUID to ensure no results are returned
+        return query.filter(id=uuid.uuid4())
 
     """
     Abstract base class that defines the `get_headships()` method.
@@ -314,101 +316,12 @@ class HeadshipModel(models.Model):
 
 
 class TimeStampedModel(HeadshipModel):
-    id = fields.IntField(pk=True)
+    id = fields.UUIDField(pk=True, default=uuid.uuid4)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
 
     class Meta:
         abstract = True  # Ensure no table is created for this model
 
-    # @classmethod
-    # async def with_headship(cls, headships: List[Dict[str, Any]] = None):
-    #     """
-    #     Filter the query based on user headships.
 
-    #     Args:
-    #         cls: The class from which this method is called.
-    #         headship (List[dict]): An optional list of dictionaries containing headship information,
-    #         including:
-    #             - `model`: The Tortoise ORM model related to the entity (e.g., `Ward`).
-    #             - `headship_type`: The type of headship (from the `HeadshipType` enum).
-    #             - `column`: The foreign key column that links the resource to a headship
-    #                         (e.g., 'ward_id' for resources linked to wards).
-    #                         not required when model == cls
-    #             - `path`: The ORM path for filtering or accessing data through nested relationships.
-    #                     This helps identify how the resource is related to a specific entity
-    #                     (e.g., a `Ward` linked via a region > district > council > division).
-    #                     not required when model == cls
-    #         The headship argument is not required when a model has get_headships() function defined
-
-    #     Returns:
-    #         The filtered query based on user headships.
-    #     """
-
-    #     query = cls  # Start with the base query for the class
-    #     model_headships = headships if headships else cls.get_headships()
-
-    #     # Proceed only if the headship argument is provided and is a List
-    #     if model_headships and isinstance(model_headships, List):
-    #         filtered = False  # Flag to check if any filtering occurred
-    #         q_conditions = []  # Initialize a list to store Q objects for filtering
-
-    #         # Iterate over each headship in the provided list
-    #         for model_headship in model_headships:
-    #             from fast_api_builder.auth.auth import Auth
-    #             # Get user headships associated with the current model headship type
-    #             user_headships = await Auth.user_headships(model_headship['headship_type'])
-
-    #             # Check if any user has a GLOBAL headship; if so, return the unfiltered query
-    #             if any(user_headship.headship_type == HeadshipType.GLOBAL.value for user_headship in user_headships if user_headship):
-    #                 return query
-
-    #             # Loop through each user headship
-    #             for user_headship in user_headships:
-    #                 if user_headship:
-    #                     filtered = True  # Mark that filtering has occurred
-
-    #                     # If the current class matches the model headship's model
-    #                     if cls is model_headship['model']:
-    #                         # Add a Q condition to filter by headship ID
-    #                         q_conditions.append(Q(id=user_headship.headship_id))
-    #                     else:
-    #                         # Fetch related IDs for the current user headship
-    #                         ids_query = model_headship['model'].filter(id=user_headship.headship_id)
-
-    #                         if model_headship.get('path', None):
-    #                             ids = await ids_query.prefetch_related(f"{model_headship['path']}") \
-    #                                                 .values_list(f"{model_headship['path']}__id", flat=True)
-    #                         else:
-    #                             ids = await ids_query.values_list(f"id", flat=True)
-
-    #                         # Create a Q object to filter based on related IDs
-    #                         ids_condition = Q(**{f"{model_headship['column']}__in": ids})
-    #                         # Add the IDs condition to the list of Q conditions
-    #                         q_conditions.append(ids_condition)
-
-    #         # If there are any Q conditions collected, combine them with OR
-    #         if q_conditions:
-    #             combined_q = q_conditions.pop(0)  # Start with the first Q condition
-    #             for q in q_conditions:
-    #                 combined_q |= q  # Combine each subsequent Q condition with OR
-
-    #             # Apply the combined Q condition to the query
-    #             query = query.filter(combined_q)
-
-    #         # If no filters were applied and there are headships, add a placeholder filter
-    #         if not filtered and len(model_headships):
-    #             query = query.filter(id=uuid.uuid4())
-
-    #     return query  # Return the final query
-
-
-from .lookups import *
-from .uaa import *
-# from .iop import *
-# from .website import *
-from .notification import *
-from .workflow import *
-from .pg_research import *
-# from .report import *
 

@@ -8,7 +8,6 @@ charset-normalizer==3.3.2
 click==8.1.7
 dictdiffer==0.9.0
 # Editable install with no version control (fast-api-builder==0.1.0)
--e ../
 fastapi==0.115.0
 graphql-core==3.2.4
 h11==0.14.0
