@@ -4,13 +4,13 @@ from tortoise import fields
 
 from fast_api_builder.models import TimeStampedModel
 from fast_api_builder.utils.config import get_user_model_reference
-from fast_api_builder.utils.enums import NotificationChannel
+from fast_api_builder.utils.enums import NotificationChannel, NotificationContentType
 
 
 class NotificationTemplate(TimeStampedModel):
     name = fields.CharField(max_length=255, unique=True)
     notification_channel = fields.CharEnumField(NotificationChannel, default=NotificationChannel.EMAIL)
-    content_type = fields.CharField(max_length=100)
+    content_type = fields.CharEnumField(NotificationContentType)
     content = fields.TextField()
     is_active = fields.BooleanField(default=True)  # Use is_active instead of status
 

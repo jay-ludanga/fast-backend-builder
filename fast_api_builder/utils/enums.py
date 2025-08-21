@@ -14,3 +14,10 @@ class NotificationChannel(str, Enum):
     SMS = "SMS",
     WHATSAPP = "WhatsApp",
     PUSH = "PUSH"
+@strawberry.enum
+class NotificationContentType(str, Enum):
+    PASSWORD_RESET = "Password Reset"
+    ACCOUNT_CONFIRMATION = "Account Confirmation"
+    PUSH_NOTIFICATION = "PUSH Notification"
+    APPLICANT_NOTIFICATION = "Applicant Notification"
+    EVALUATOR_NOTIFICATION = "Evaluator Notification"
