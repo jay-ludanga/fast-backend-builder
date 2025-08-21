@@ -61,9 +61,10 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             username = current_user.get('email')
 
             data = obj_in.__dict__
-            for key, value in data.items():
-                if isinstance(value, Enum):
-                    data[key] = value.value
+            # according shija ntula we comment here waiting front end to  bring enum
+            # for key, value in data.items():
+            #     if isinstance(value, Enum):
+            #         data[key] = value.value
 
             # Run the condition function if provided and it's async
             if condition_function:

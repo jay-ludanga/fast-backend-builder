@@ -1,169 +1,217 @@
 import asyncio
+from contextvars import ContextVar
 from datetime import datetime, timedelta
-import contextvars
 
-from tortoise import Tortoise
-
-from fast_api_builder.models import HeadshipType
-from fast_api_builder.models.group_permissions import Group, Permission
+from fast_api_builder.models.headship import Headship
 from fast_api_builder.utils.config import get_user_model
-
-# Context variables for request-specific auth data
-_user_ctx = contextvars.ContextVar("user_ctx", default=None)
-_user_data_ctx = contextvars.ContextVar("user_data_ctx", default=None)
-_permissions_ctx = contextvars.ContextVar("permissions_ctx", default=None)
-_groups_ctx = contextvars.ContextVar("groups_ctx", default=None)
-_student_ctx = contextvars.ContextVar("student_ctx", default=None)
-_staff_ctx = contextvars.ContextVar("staff_ctx", default=None)
+from fast_api_builder.utils.enums import HeadshipType
 
 User = get_user_model()
+
+
 class Auth:
-    @classmethod
-    async def init(cls, user_info: dict, user: User = None):
-        """Initialize auth for the current request context."""
-        _user_data_ctx.set(user_info)
-        _user_ctx.set(user)
-        _permissions_ctx.set(None)
-        _groups_ctx.set(None)
+    _user_data: ContextVar[dict | None] = ContextVar("user_data", default=None)
+    _user: ContextVar[User | None] = ContextVar("_user", default=None)
+    _permissions: ContextVar[dict | None] = ContextVar("permissions", default=None)
+    _groups: ContextVar[dict | None] = ContextVar("groups", default=None)
+    _initialized: ContextVar[bool | None] = ContextVar("initialized", default=False)
 
     @classmethod
-    async def user(cls) -> User:
-        """Get the currently authenticated user."""
-        user = _user_ctx.get()
-        if not user:
-            user_info = _user_data_ctx.get()
-            if not user_info:
-                return None
-            user = await User.get(id=user_info.get("user_id"))
-            _user_ctx.set(user)  # Cache it in the current request context
-        return user
+    async def init(cls, user_info: dict, permissions: dict = {}, groups: dict = {}):
+        """
+        Asynchronously initialize the Auth service with user information, permissions, and groups.
+
+        This method should be called once during the request lifecycle, typically in middleware.
+        After initialization, the auth data can be accessed globally via the class methods.
+
+        Args:
+            user_info (dict): Information about the authenticated user (e.g., ID, name).
+            permissions (dict): A dictionary mapping user IDs to their respective permissions.
+            groups (dict): A dictionary mapping user IDs to their respective group memberships.
+        """
+        cls._user_data.set(user_info)
+        cls._permissions.set(permissions)
+        cls._groups.set(groups)
+        cls._initialized.set(True)
 
     @classmethod
-    def user_data(cls):
-        """Get the current authenticated user data."""
-        return user_data if (user_data := _user_data_ctx.get()) else None
+    def user(cls):
+        """
+        Get the current authenticated user data.
+
+        This method returns the user data that was passed during initialization.
+        Raises an exception if the Auth service has not been initialized.
+
+        Returns:
+            dict: The current user data (e.g., {"id": "user123", "name": "John Doe"}).
+        """
+        cls._ensure_initialized()
+        return cls._user_data.get()
 
     @classmethod
-    async def user_permissions(cls):
-        """Get all permissions for the authenticated user."""
-        permissions = _permissions_ctx.get()
-        if permissions is None:
-            user = await cls.user()
-            permissions = await Permission.filter(
-                permission_groups__group__group_users__customuser=user
-            ).distinct().values_list("codename", flat=True)
-            _permissions_ctx.set(permissions)  # Store in context
-        return permissions
+    async def user_object(cls):
+        """
+        Get the current authenticated user object.
+
+        This method returns the user object that was passed during initialization.
+        Raises an exception if the Auth service has not been initialized.
+
+        Returns:
+            User: The current user object.
+        """
+        cls._ensure_initialized()
+
+        if cls._user.get():
+            return cls._user.get()
+
+        user_id = cls.user().get('user_id')
+
+        if not user_id:
+            return None
+
+        cls._user.set(await User.get(id=user_id))
+
+        return cls._user.get()
 
     @classmethod
-    async def is_staff(cls) -> bool:
-        """Check if the user is in the 'staffs' group."""
-        user = await cls.user()
+    async def user_can(cls, permissions: str | list):
+        """
+        Check if the authenticated user has the given permission.
+
+        Use this method to check if the current user is allowed to perform a certain action.
+        The permissions should have been passed during the initialization phase.
+
+        Args:
+            permission (str): The permission string to check (e.g., "read", "write").
+
+        Returns:
+            bool: True if the user has the given permission, False otherwise.
+        """
+        cls._ensure_initialized()
+        if isinstance(permissions, str):
+            permissions = [permissions]
+
+        user_id = cls.user().get('user_id')
+
+        if not user_id:
+            return False
+
+        user: User = await User.get(id=user_id)
+
         if not user:
             return False
-        if (groups := _groups_ctx.get()) is None:
-            groups = await Group.filter(group_users__customuser=user).values_list("name", flat=True)
-            _groups_ctx.set(groups)
-        return "staffs" in groups
+
+        has_permission = any(perm in await cls.user_permissions() for perm in permissions)
+
+        return has_permission or user.is_superuser
 
     @classmethod
-    async def is_student(cls) -> bool:
-        """Check if the user is in the 'students' group."""
-        user = await cls.user()
-        if not user:
-            return False
-        if (groups := _groups_ctx.get()) is None:
-            groups = await Group.filter(group_users__customuser=user).values_list("name", flat=True)
-            _groups_ctx.set(groups)
-        return "students" in groups
+    async def user_groups(cls):
+        """
+        Get the groups the authenticated user belongs to.
 
+        Use this method to retrieve the groups the current user is a member of.
+        The groups data should have been passed during the initialization phase.
 
+        Returns:
+            list: A list of groups the user belongs to (e.g., ["admin", "editor"]).
+        """
+        cls._ensure_initialized()
+        if cls._groups.get():
+            return cls._groups.get()
 
-    @classmethod
-    async def user_headships(cls, headship_type: HeadshipType):
-        """Get all headships for the authenticated user."""
-        user_info = _user_data_ctx.get()
-        if not user_info:
-            return []
+        user_id = cls.user().get('user_id')
 
-        user_id = user_info.get("user_id")
         if not user_id:
             return []
 
-        user = await cls.user()
-        if user.is_superuser:
-            return [
-                Headship(
-                    user=user_info,
-                    headship_type=HeadshipType.GLOBAL.value,
-                    headship_id=None,
-                    # start_date=datetime.now() - timedelta(days=1),
-                    # end_date=datetime.now() + timedelta(weeks=1),
-                    # is_active=True,
-                )
-            ]
-        return [Headship(
-            user=user_info,
-            headship_type=headship_type.value,
-            headship_id=id,
+        user: User = await User.get(id=user_id)
 
-        ) for id in await cls.get_programme_ids_for_user(user_id=user_id)]
+        if user:
+            # Query the permission codes directly using .values_list() across the user's groups
+            cls._groups.set(await user.groups.all())
 
-    @staticmethod
-    async def get_programme_ids_for_user(user_id: int) -> list[int]:
-        conn = Tortoise.get_connection("default")
-        programme_ids = set()
+        return cls._groups.get()
 
-        # 1. ProgrammeHeadship → Programme
-        rows = await conn.execute_query_dict("""
-            SELECT DISTINCT ph.programme_id
-            FROM programme_headship ph
-            JOIN headship h ON ph.headship_ptr_id = h.id
-            WHERE h.user_id = $1 AND h.is_active = TRUE
-        """, [user_id])
-        programme_ids.update(r["programme_id"] for r in rows if r["programme_id"])
+    @classmethod
+    async def user_permissions(cls):
+        """
+        Get all the permissions for the authenticated user.
 
-        # 2. ProgrammeTypeHeadship → Programme
-        rows = await conn.execute_query_dict("""
-            SELECT DISTINCT p.id
-            FROM programme_type_headship pth
-            JOIN headship h ON pth.headship_ptr_id = h.id
-            JOIN programme p ON p.programme_type_id = pth.programme_type_id
-            WHERE h.user_id = $1 AND h.is_active = TRUE
-        """, [user_id])
-        programme_ids.update(r["id"] for r in rows)
+        This method returns a list of permissions associated with the user.
+        It allows you to see all the actions the user is authorized to perform.
 
-        # 3. DepartmentHeadship → Programme
-        rows = await conn.execute_query_dict("""
-            SELECT DISTINCT p.id
-            FROM department_headship dh
-            JOIN headship h ON dh.headship_ptr_id = h.id
-            JOIN programme p ON p.department_id = dh.department_id
-            WHERE h.user_id = $1 AND h.is_active = TRUE
-        """, [user_id])
-        programme_ids.update(r["id"] for r in rows)
+        Returns:
+            list: A list of permissions (e.g., ["read", "write", "delete"]).
+        """
+        cls._ensure_initialized()
+        if cls._permissions.get():
+            return cls._permissions.get()
 
-        # 4. UnitHeadship → Department → Programme
-        rows = await conn.execute_query_dict("""
-            SELECT DISTINCT p.id
-            FROM unit_headship uh
-            JOIN headship h ON uh.headship_ptr_id = h.id
-            JOIN department d ON d.unit_id = uh.unit_id
-            JOIN programme p ON p.department_id = d.id
-            WHERE h.user_id = $1 AND h.is_active = TRUE
-        """, [user_id])
-        programme_ids.update(r["id"] for r in rows)
+        user_id = cls.user().get('user_id')
 
-        # 5. CampusHeadship → Unit → Department → Programme
-        rows = await conn.execute_query_dict("""
-            SELECT DISTINCT p.id
-            FROM campus_headship ch
-            JOIN headship h ON ch.headship_ptr_id = h.id
-            JOIN unit u ON u.campus_id = ch.campus_id
-            JOIN department d ON d.unit_id = u.id
-            JOIN programme p ON p.department_id = d.id
-            WHERE h.user_id = $1 AND h.is_active = TRUE
-        """, [user_id])
-        programme_ids.update(r["id"] for r in rows)
+        if not user_id:
+            return []
 
-        return list(programme_ids)
+        user: User = await User.get(id=user_id)
+
+        if user:
+            # Query the permission codes directly using .values_list() across the user's groups
+            permission_codes = await user.groups.all().values_list('permissions__code', flat=True)
+
+            # Return unique permission codes as a list
+            cls._permissions.set(list(set(permission_codes)))
+
+        return cls._permissions.get()
+
+    @classmethod
+    async def user_headships(cls, headship_type: HeadshipType):
+        """
+        Get all the permissions for the authenticated user.
+
+        This method returns a list of permissions associated with the user.
+        It allows you to see all the actions the user is authorized to perform.
+
+        Returns:
+            list: A list of permissions (e.g., ["read", "write", "delete"]).
+        """
+        cls._ensure_initialized()
+
+        user_id = cls.user().get('user_id')
+
+        if user_id:
+            if not cls._user.get():
+                cls._user.set(await User.get(id=user_id))
+
+            if cls._user.get():
+                if cls._user.get().is_superuser:
+                    return [Headship(
+                        user=cls._user.get(),
+                        headship_type=HeadshipType.GLOBAL.value,
+                        headship_id=None,
+                        start_date=datetime.now() - timedelta(days=1),
+                        end_date=datetime.now() + timedelta(weeks=1),
+                        is_active=True
+                    )]
+
+                return await Headship.filter(user_id=user_id,
+                                             headship_type__in=[HeadshipType.GLOBAL.value, headship_type.value],
+                                             is_active=True).all()
+
+        return []
+
+        # return await cls._permissions.get(user_id, [])
+
+    @classmethod
+    def _ensure_initialized(cls):
+        """
+        Ensure the Auth service has been initialized.
+
+        This private method is used internally to verify that the service is initialized before
+        any user-related data is accessed. If not initialized, it raises an exception.
+
+        Raises:
+            Exception: If the Auth service is not initialized.
+        """
+        if not cls._initialized.get():
+            raise Exception("Auth service is not initialized. Call `Auth.init()` first.")

@@ -7,13 +7,6 @@ from tortoise.queryset import Q
 from typing import Any, Dict, List
 
 
-class HeadshipType(str, Enum):
-    GLOBAL = "GLOBAL"
-    DEPARTMENT = "DEPARTMENT"
-    PROGRAMME = "PROGRAMME"
-    PROGRAMME_TYPE = "PROGRAMME_TYPE"
-    CAMPUS = "CAMPUS"
-    UNIT = "UNIT"
 class HeadshipModel(models.Model):
     class Meta:
         abstract = True  # Ensure no table is created for this model
