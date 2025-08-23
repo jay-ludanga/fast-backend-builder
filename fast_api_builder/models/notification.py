@@ -3,7 +3,6 @@ import pickle
 from tortoise import fields
 
 from fast_api_builder.models import TimeStampedModel
-from fast_api_builder.utils.config import get_user_model_reference
 from fast_api_builder.utils.enums import NotificationChannel, NotificationContentType
 
 
@@ -15,7 +14,7 @@ class NotificationTemplate(TimeStampedModel):
     is_active = fields.BooleanField(default=True)  # Use is_active instead of status
 
     created_by = fields.ForeignKeyField(
-        get_user_model_reference(),
+        'models.User',
         null=True,
         on_delete=fields.SET_NULL,
         related_name="notification_templates_created"  # Specific related_name to avoid conflict

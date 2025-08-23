@@ -7,10 +7,10 @@ def add_arguments(parser: argparse.ArgumentParser):
     crud_purser = subparsers.add_parser('gen:crud-api', help='Generate CRUD GraphQL Apis')
 
     crud_purser.add_argument(
-        "--model", 
+        "--models",
         type=str, 
         required=True,
-        help="Specify a model for which to generate graphql schema"
+        help="Specify comma separated models for which to generate graphql schema"
     )
     
     crud_purser.add_argument(
@@ -18,7 +18,15 @@ def add_arguments(parser: argparse.ArgumentParser):
         type=str,
         help="Module folder in which to generate code"
     )
-    
+
+
+    crud_purser.add_argument(
+        "--module-package",
+        type=str,
+        required=True,
+        help="Module Package in which to Models of the module contains"
+    )
+
     crud_purser.add_argument(
         "--with-controller", 
         type=bool, 
@@ -55,12 +63,13 @@ def main():
         parser.print_help()
         exit(1)
     if args.command == 'gen:crud-api':
-        model = args.model if args.model else None
+        models = args.models if args.models else None
         with_controller = args.with_controller if args.with_controller else False
         with_attachment = args.with_attachment if args.with_attachment else False
         create_multiple = args.create_multiple if args.create_multiple else False
         with_transition = args.with_transition if args.with_transition else False
-        gen_crud_schema(args.module, model, with_controller, create_multiple, with_attachment, with_transition)
+
+        gen_crud_schema(args.module, args.module_package, models, with_controller, create_multiple, with_attachment, with_transition)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,10 @@
 from tortoise import fields
 from fast_api_builder.models import TimeStampedModel
-from fast_api_builder.utils.config import get_user_model_reference
 
 
 class Headship(TimeStampedModel):
     user = fields.ForeignKeyField(
-        get_user_model_reference(),
+        'models.User',
         related_name="headships",
         on_delete=fields.RESTRICT,
     )
@@ -16,7 +15,7 @@ class Headship(TimeStampedModel):
     is_active = fields.BooleanField(default=True)
 
     created_by = fields.ForeignKeyField(
-        get_user_model_reference(),
+        'models.User',
         null=True,
         on_delete=fields.SET_NULL,
         related_name="headships_created",

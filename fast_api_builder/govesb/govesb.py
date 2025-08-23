@@ -76,7 +76,7 @@ class GovEsb:
             public_key: str, 
             engine_url: str, 
             token_url: str, 
-            timeout: str = 180
+            timeout: int = 180
         ):
         """Initialize the GovESB service asynchronously with the given configuration."""
         try:

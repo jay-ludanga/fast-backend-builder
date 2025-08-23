@@ -12,7 +12,6 @@ common_template = 'fast_api_builder.common.templates'
 crud_template = 'fast_api_builder.crud.templates'
 attach_template = 'fast_api_builder.attach.templates'
 transit_template = 'fast_api_builder.workflow.templates'
-muarms_models = 'fast_api_builder.muarms.models'
 
 api_template_path = 'graphql_api_template.py'
 type_template_path = 'gql_type_template.py'
@@ -35,7 +34,7 @@ def has_class(filename, classname):
         return re.search(pattern, content) is not None
     return None
 
-def generate_schema(module, model: str, with_controller: bool, create_multiple: bool, with_attachment: bool, with_transition: bool):
+def generate_schema(module, module_package:str,  models_str: str, with_controller: bool, create_multiple: bool, with_attachment: bool, with_transition: bool):
     type_template = get_package_file(crud_template, type_template_path)
     if not type_template:
         return
@@ -95,12 +94,8 @@ def generate_schema(module, model: str, with_controller: bool, create_multiple: 
         write_to_file(f"modules/__init__.py", module_init)
         write_to_file(f"{module_path}/api.py", "'''Module API File'''")
         
-    # if model is None:
-    #     gql_schemas = generate_schemas()
-    #     models = gql_schemas.keys()
-    # else:
-    #     gql_schemas = {}
-    models = model.replace(' ', '').split(',')
+
+    models = models_str.replace(' ', '').split(',')
         
     query_schemas = None
     mutation_schemas = None
@@ -117,7 +112,7 @@ def generate_schema(module, model: str, with_controller: bool, create_multiple: 
             .replace('CreateType', f"{model_name}Create") \
             .replace('Model', f"{model_name}")
 
-        real_api_template = f"from fast_api_builder.muarms.models import {model_name}\n" + \
+        real_api_template = f"from {module_package} import {model_name}\n" + \
                             f"from modules.{module}.schemas.request import *\n" + \
                             f"from modules.{module}.schemas.response import *\n" + \
                             f"\n{real_api_template.split("'''Imports'''")[1]}"
@@ -173,19 +168,19 @@ def generate_schema(module, model: str, with_controller: bool, create_multiple: 
 
         api_schema_file_name = f"{to_snake_case(model_name)}_crud_api.py"
         
-        schema_fields = generate_schemas(model_name)
+        schema_fields = generate_schemas(module_package, model_name)
         if schema_fields:
             schema_fields = schema_fields.get(model_name)
         else:
             print(f"Model with name: {model_name} does not exist in models list")
-            return
+            break
         
         # Create controller template classes
         if with_controller:
             controller_path = f"{module_path}/controllers/{to_snake_case(model_name)}.py"
             if not has_class(controller_path, f"{model_name}Controller"):
                 real_controller_template = controller_template.replace('_MODEL_', f"{model_name}")\
-                                .replace(f"'''IMPORTS'''", f"from modules.{module}.schemas.request import *")
+                                .replace(f"'''IMPORTS'''", f"from modules.{module}.schemas.request import *").replace('_MODELPACKAGE_', module_package)
                 output_file = f"{module_path}/controllers/{to_snake_case(model_name)}.py"
                 print(f"Writing {model_name} controller in: {output_file}")
                 write_to_file(output_file, real_controller_template)

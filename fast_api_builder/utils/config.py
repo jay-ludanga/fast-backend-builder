@@ -16,3 +16,14 @@ def get_user_model_reference() -> str:
     if USER_MODEL_REF is None:
         raise RuntimeError("User model reference not configured.")
     return USER_MODEL_REF
+
+MODEL_PACKAGES: list[str] = []
+
+def set_model_packages(packages: list[str]):
+    global MODEL_PACKAGES
+    MODEL_PACKAGES = packages
+
+def get_model_packages() -> list[str]:
+    if not MODEL_PACKAGES:
+        raise RuntimeError("Model packages not set. Call set_model_packages() first.")
+    return MODEL_PACKAGES

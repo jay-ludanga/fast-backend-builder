@@ -3,17 +3,17 @@ from datetime import timedelta, datetime
 from tortoise import fields
 
 from tortoise.functions import Max  # Import Max function
-from tortoise.transactions import in_transaction
 
 from fast_api_builder.models import TimeStampedModel
 from fast_api_builder.notifications.service import NotificationService
-from fast_api_builder.utils.config import get_user_model, get_user_model_reference
 from fast_api_builder.workflow.exceptions import NoCurrentStepError, MissingStepError, PermissionDeniedError, \
     MissingRemarkError, WorkflowException
 
 '''List of Models'''
 
-User = get_user_model()
+User = "models.User"  # lazy reference
+
+
 class Workflow(TimeStampedModel):
     name = fields.CharField(max_length=255, unique=True)
     code = fields.CharField(max_length=100, unique=True)
@@ -24,7 +24,7 @@ class Workflow(TimeStampedModel):
     steps: fields.ReverseRelation["WorkflowStep"]
 
     created_by = fields.ForeignKeyField(
-        get_user_model_reference(),
+        'models.User',
         null=True,
         on_delete=fields.SET_NULL,
         related_name="workflows_created"  # Specific related_name to avoid conflict
@@ -46,7 +46,6 @@ class Workflow(TimeStampedModel):
         # Get the WorkflowStep with the largest order in this workflow
         final_step = await WorkflowStep.filter(workflow=self).order_by('-order').first()
         return final_step
-
 
     async def can_transit(self, current_step: 'WorkflowStep', next_step_obj: 'WorkflowStep', user: User,
                           remarks) -> bool:
@@ -136,7 +135,7 @@ class WorkflowStep(TimeStampedModel):
     order = fields.IntField(default=0)  # Added order field with default value 0
 
     created_by = fields.ForeignKeyField(
-        get_user_model_reference(),
+        'models.User',
         null=True,
         on_delete=fields.SET_NULL,
         related_name="workflow_steps_created"  # Specific related_name to avoid conflict
@@ -183,7 +182,7 @@ class Transition(TimeStampedModel):
     direction = fields.CharField(default='FORWARD', max_length=100)
 
     created_by = fields.ForeignKeyField(
-        get_user_model_reference(),
+        'models.User',
         null=True,
         on_delete=fields.SET_NULL,
         related_name="transitions_created"  # Specific related_name to avoid conflict
@@ -219,7 +218,7 @@ class Evaluation(TimeStampedModel):
     workflow_step = fields.ForeignKeyField('models.WorkflowStep', related_name='evaluations', on_delete=fields.RESTRICT)
     remark = fields.CharField(max_length=200, null=True)
     user = fields.ForeignKeyField(
-        get_user_model_reference(),
+        'models.User',
         related_name='evaluations',
         on_delete=fields.RESTRICT,
         help_text="User evaluations"
@@ -264,11 +263,13 @@ class Evaluation(TimeStampedModel):
         """ Send a notification if the workflow step requires it. """
         if self.workflow_step.notify_applicant:
             # Implement the logic to send an email or other form of notification
-            first_evaluation = await Evaluation.filter(object_id=self.object_id, object_name=self.object_name).select_related('user').order_by(
+            first_evaluation = await Evaluation.filter(object_id=self.object_id,
+                                                       object_name=self.object_name).select_related('user').order_by(
                 'created_at').first()
 
             if first_evaluation:
-                message["recipient"] = first_evaluation.user.email # Assuming you have a list of recipients in the messagefirst_evaluation.user.email
+                message[
+                    "recipient"] = first_evaluation.user.email  # Assuming you have a list of recipients in the messagefirst_evaluation.user.email
                 message["args"]["actor_name"] = "ARMS Team"
                 message["args"]["client_name"] = first_evaluation.user.get_short_name()
 
@@ -300,7 +301,7 @@ class Evaluation(TimeStampedModel):
                     message["recipient"] = email
                     message["args"]["actor_name"] = "ARMS Team"
                     message["content_type"] = notification_content
-                    message["args"]["client_name"] = short_name                  # Personalize message with the user's short name
+                    message["args"]["client_name"] = short_name  # Personalize message with the user's short name
                     # Pass the message to your notification sending logic
                     notification = NotificationService.get_instance()
                     await notification.put_message_on_queue('Notifications', message)

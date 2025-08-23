@@ -5,7 +5,7 @@ from typing import Any, Dict
 from bullmq import Queue
 
 from fast_api_builder.auth.redis import RedisClient
-from fast_api_builder.muarms.models import FailedTask
+from fast_api_builder.models.notification import FailedTask
 from fast_api_builder.utils.error_logging import log_exception
 
 

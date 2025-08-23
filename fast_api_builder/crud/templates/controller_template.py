@@ -1,6 +1,6 @@
 
 from fast_api_builder.crud.gql_controller import GQLBaseCRUD
-from fast_api_builder.muarms.models import _MODEL_
+from _MODELPACKAGE_ import _MODEL_
 
 '''IMPORTS'''
 

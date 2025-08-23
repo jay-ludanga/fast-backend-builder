@@ -6,6 +6,8 @@ from tortoise.queryset import Q
 
 from typing import Any, Dict, List
 
+from fast_api_builder.utils.enums import HeadshipType
+
 
 class HeadshipModel(models.Model):
     class Meta:
@@ -316,5 +318,8 @@ class TimeStampedModel(HeadshipModel):
     class Meta:
         abstract = True  # Ensure no table is created for this model
 
-
-
+from .attachment import Attachment
+from .group_permissions import Group, Permission
+from .headship import Headship
+from .notification import NotificationTemplate
+from .workflow import Workflow, WorkflowStep, Transition, Evaluation
