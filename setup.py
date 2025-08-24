@@ -24,8 +24,6 @@ setup(
         'celery[redis]==5.5.3',
         'xlsxwriter==3.2.5',
         'fpdf2==2.8.3',
-        'jwt==1.4.0',
-
     ],
     entry_points={
         'console_scripts': [

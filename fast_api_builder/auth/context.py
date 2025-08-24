@@ -1,7 +1,5 @@
-import contextlib
 from typing import List
 
-from fast_api_builder.auth.auth import Auth
 from fast_api_builder.common.response.codes import ResponseCode
 from fast_api_builder.common.response.schemas import ApiResponse
 
@@ -9,8 +7,10 @@ from fastapi import Request
 from strawberry import Info
 from strawberry.extensions import FieldExtension
 from strawberry.fastapi import BaseContext
-from graphql import GraphQLError
-SESSION_EXPIRED_CODE = "SESSION_EXPIRED"
+
+from fast_api_builder.utils.config import get_user_model
+
+User = get_user_model()
 
 # Custom GraphQL Context Class
 class CustomGraphQLContext(BaseContext):
@@ -40,22 +40,10 @@ class LoginRequiredExtension(FieldExtension):
         if not is_authenticated.has_permission(info=info):
             # Return a custom response or raise an error if unauthorized
             if info.context.auth_error == 'EXPIRED':
-                raise GraphQLError(
-                    "Session expired",
-                    extensions={"code": ResponseCode.SESSION_EXPIRED}
-                )
                 return ApiResponse(
                     code=ResponseCode.SESSION_EXPIRED,
                     status=False,
                     message="Session Expired",
-                    data=None,
-                )
-            
-            if info.context.auth_error == 'TOKEN_EXPIRED':
-                return ApiResponse(
-                    code=ResponseCode.TOKEN_EXPIRED,
-                    status=False,
-                    message="Token Expired",
                     data=None,
                 )
             return ApiResponse(
@@ -73,14 +61,25 @@ class CustomPermissionExtension(FieldExtension):
         self.required_permissions = required_permissions
 
     async def resolve_async(self, next_, root, info: Info, **kwargs):
-        user = None
-        with contextlib.suppress(Exception):
-            user = await Auth.user()
-
+        user = info.context.user
         if user:
+            # Check if the user has the required permissions
+            user_obj = await User.filter(id=user.get('user_id')).prefetch_related('groups__permissions').get_or_none()
+            if not user_obj:
+                return ApiResponse(
+                    code=ResponseCode.UNAUTHORIZED,
+                    status=False,
+                    message="Unauthorized",
+                    data=None,
+                )
 
-            permission_codes = await Auth.user_permissions()
+            # Now you can use `user_obj` which already has the prefetched data
+            user: User = user_obj
 
+            # Query the permission codes directly using .values_list() across the user's groups
+            permission_codes = await user.groups.all().values_list('permissions__code', flat=True)
+
+            # Return unique permission codes as a list
             permissions = list(set(permission_codes))
 
             has_permission = any(perm in permissions for perm in self.required_permissions)
@@ -88,17 +87,13 @@ class CustomPermissionExtension(FieldExtension):
                 return await next_(root, info, **kwargs)
             else:
                 return ApiResponse(
-                    code=ResponseCode.RESTRICTED_ACCESS,
+                    code=ResponseCode.UNAUTHORIZED,
                     status=False,
                     message="Restricted Access",
                     data=None,
                 )
         else:
             if info.context.auth_error == 'EXPIRED':
-                raise GraphQLError(
-                    "Session expired",
-                    extensions={"code": ResponseCode.SESSION_EXPIRED}
-                )
                 return ApiResponse(
                     code=ResponseCode.SESSION_EXPIRED,
                     status=False,

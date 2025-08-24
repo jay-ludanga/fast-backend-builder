@@ -11,14 +11,14 @@ from fast_api_builder.utils.error_logging import log_exception, log_message, log
 
 class RedisClient:
     _instance = None
-    
+
     def __new__(cls, *args, **kwargs):
         # Prevent instantiation if an instance already exists
         if cls._instance is None:
             cls._instance = super(RedisClient, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, host='localhost', port=6379, password=None, db=0, pool_size=10, debug = True):
+    def __init__(self, host='localhost', port=6379, password=None, db=0, pool_size=10, debug=True):
         if not hasattr(self, 'initialized'):  # Avoid re-initializing
             self.host = host
             self.port = port
@@ -36,7 +36,7 @@ class RedisClient:
         :return: Redis client instance.
         """
         try:
-            if not self.debug: #config('DEBUG', cast=bool):
+            if not self.debug:  # config('DEBUG', cast=bool):
                 redis_url = f"redis://:{self.password}@{self.host}:{self.port}/{self.db}"
             else:
                 redis_url = f"redis://{self.host}:{self.port}/{self.db}"
@@ -60,6 +60,9 @@ class RedisClient:
         """
         if self.client:
             self.client.set(key, value, ex=ex)
+
+    def setex(self, key: str, ttl: int, value: str):
+        return self.client.setex(key, ttl, value)
 
     def get(self, key):
         """
@@ -178,6 +181,7 @@ class RedisClient:
         if self.client:
             self.client.close()
             print("Redis connection closed")
+
     def publish(self, channel, message):
         """
         Publish a message to a Redis channel.
@@ -213,6 +217,7 @@ class RedisClient:
                 if message:
                     on_message(message)
                 await asyncio.sleep(1)
+
     def sismember(self, key, value):
         """
         Check if a value is a member of a set in Redis.

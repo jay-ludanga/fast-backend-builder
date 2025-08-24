@@ -49,11 +49,20 @@ class JWTHandler:
         expire = datetime.now() + expires_delta
         data.update({"exp": expire})
         encoded_jwt = jwt.encode(data, self.reset_secret, algorithm=self.algorithm)
+
+        # store in redis with TTL so it auto-expires
+        self.redis.setex(f"reset_token:{encoded_jwt}", int(expires_delta.total_seconds()), "valid")
+
         return encoded_jwt
 
     def get_reset_password_data(self, token: str) -> Dict | None:
         """Fastapi Dependency to get JWT Data from the User"""
         try:
+            # 🔹 First check Redis to ensure it's still valid
+            if not self.redis.get(f"reset_token:{token}"):
+                print("Token already used or invalidated")
+                return None
+
             data = jwt.decode(token, self.reset_secret, algorithms=[self.algorithm])
         except jwt.exceptions.InvalidTokenError as e:
             if isinstance(e, jwt.exceptions.ExpiredSignatureError):
@@ -63,6 +72,9 @@ class JWTHandler:
                 print("Token is invalid")
                 return None
         return data
+
+    def invalidate_reset_token(self, token: str):
+        self.redis.delete(f"reset_token:{token}")
 
     def create_access_token(self, data: Dict) -> str:
         """Creates an JWT Access Token with `data` and expires after `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`"""

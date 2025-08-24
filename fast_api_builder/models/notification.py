@@ -3,14 +3,19 @@ import pickle
 from tortoise import fields
 
 from fast_api_builder.models import TimeStampedModel
-from fast_api_builder.utils.enums import NotificationChannel, NotificationContentType
+from fast_api_builder.utils.enums import NotificationChannel
 
 
 class NotificationTemplate(TimeStampedModel):
     name = fields.CharField(max_length=255, unique=True)
     notification_channel = fields.CharEnumField(NotificationChannel, default=NotificationChannel.EMAIL)
-    content_type = fields.CharEnumField(NotificationContentType)
+    # Dynamic content type (like PASSWORD_RESET, ACCOUNT_CONFIRMATION, INVOICE_CREATED, etc.)
+    content_type = fields.CharField(
+        max_length=100,
+        description="Dynamic string identifier (e.g., PASSWORD_RESET, ACCOUNT_CONFIRMATION)"
+    )
     content = fields.TextField()
+    args_schema = fields.JSONField(null=True)
     is_active = fields.BooleanField(default=True)  # Use is_active instead of status
 
     created_by = fields.ForeignKeyField(

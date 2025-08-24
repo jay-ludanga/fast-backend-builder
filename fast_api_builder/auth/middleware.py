@@ -4,12 +4,13 @@ from typing import Optional, Callable, Any
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from fast_api_builder.utils.config import get_user_model
 from fast_api_builder.auth.auth import Auth
 from fast_api_builder.auth.jwt_handler import JWTHandler
-from fast_api_builder.utils.config import get_user_model
-from fast_api_builder.utils.error_logging import log_exception
 
 User = get_user_model()
+
+
 class JWTMiddleware(BaseHTTPMiddleware):
     def __init__(self,
                  app,
@@ -41,13 +42,13 @@ class JWTMiddleware(BaseHTTPMiddleware):
                 else:
                     request.state.user = payload.get('data')
                     request.state.auth_error = payload.get('error')
-                    
+
                     await Auth.init(
                         user_info=payload.get('data')
                     )
 
             except Exception as e:
-                log_exception(e)
+                print(e)
                 request.state.user = None
                 request.state.auth_error = str(e)
         else:
@@ -56,8 +57,6 @@ class JWTMiddleware(BaseHTTPMiddleware):
         # Proceed to the next middleware or GraphQL request
         response = await call_next(request)
         return response
-    
-
 
 
 def authorize(required_permissions: Optional[list] = None):
@@ -90,6 +89,7 @@ def authorize(required_permissions: Optional[list] = None):
                 raise HTTPException(status_code=403, detail="User is not authorized to access")
 
             return await func(request, *args, **kwargs)
+
         return async_wrapper
 
     return decorator
