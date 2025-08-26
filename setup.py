@@ -1,8 +1,8 @@
-# fast_api_builder/setup.py
+# fast_backend_builder/setup.py
 from setuptools import setup, find_packages
 
 setup(
-    name='fast-api-builder',
+    name='fast-backend-builder',
     version='0.1.0',
     packages=find_packages(),
     install_requires=[
@@ -27,8 +27,8 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'graphql=fast_api_builder.commands.graphql:main',  # maps 'graphql-gen' to 'generate_schema.py'
-            'reportviews=fast_api_builder.commands.report_views:main',  # maps 'graphql-gen' to 'generate_schema.py'
+            'graphql=fast_backend_builder.commands.graphql:main',  # maps 'graphql-gen' to 'generate_schema.py'
+            'reportviews=fast_backend_builder.commands.report_views:main',  # maps 'graphql-gen' to 'generate_schema.py'
         ],
     },
     include_package_data=True,
@@ -41,7 +41,7 @@ setup(
     url='https://github.com/jay-ludanga/fast-api-builder',
     package_data={
         # If your package has data files in a subdirectory
-        'fast_api_builder': [
+        'fast_backend_builder': [
             'common/templates/*',
             'crud/templates/*',
             'muarms/models/*'

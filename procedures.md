@@ -22,8 +22,10 @@ myapp
 👤 1. Create Your Custom User Model
 
 Inside mymodel_package/models/user.py:
+
 ```python
-from fast_api_builder.models.base_models import AbstractUser
+from fast_backend_builder.models.base_models import AbstractUser
+
 
 class User(AbstractUser):
     """Custom application user model extending AbstractUser."""
@@ -33,11 +35,12 @@ class User(AbstractUser):
 ⚙️ 2. Set Your User Model in main.py
 
 At the top of your main.py (before any model imports):
+
 ```python
-from fast_api_builder.utils.config import set_user_model
+from fast_backend_builder.utils.config import set_user_model
 from mymodel_package.models.user import User
 
-# Register the User model so fast_api_builder can resolve it
+# Register the User model so fast_backend_builder can resolve it
 set_user_model(User, "models.User")
 ```
 
@@ -54,7 +57,7 @@ TORTOISE_ORM = {
     "apps": {
         "models": {
             "models": [
-                "fast_api_builder.models",   # built-in models
+                "fast_backend_builder.models",   # built-in models
                 "mymodel_package.models",    # your custom models
                 "aerich.models",             # migration tracking
             ],
@@ -73,8 +76,8 @@ Run the following to scaffold GraphQL CRUD APIs:
 # For your custom User model
 graphql gen:crud-api user_management --module-package=mymodel_package.models --model User
 
-# For fast_api_builder built-in models
-graphql gen:crud-api user_management --module-package=fast_api_builder.models --model Group,Permission,Headship,Workflow,WorkflowStep,Transition,Evaluation
+# For fast_backend_builder built-in models
+graphql gen:crud-api user_management --module-package=fast_backend_builder.models --model Group,Permission,Headship,Workflow,WorkflowStep,Transition,Evaluation
 ```
 
 📦 5. Initialize Aerich (DB migrations)
