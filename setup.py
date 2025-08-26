@@ -34,9 +34,11 @@ setup(
     include_package_data=True,
     zip_safe=False,
     description='FastAPI Builder with Tortoise ORM support',
-    author='Your Name',
-    author_email='your.email@example.com',
-    url='https://github.com/your-repo/fast-api-builder',
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
+    author='Japhary Juma Hamisi',
+    author_email='japharyjuma@gmail.com',
+    url='https://github.com/jay-ludanga/fast-api-builder',
     package_data={
         # If your package has data files in a subdirectory
         'fast_api_builder': [
@@ -45,4 +47,11 @@ setup(
             'muarms/models/*'
         ]
     },
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "Framework :: FastAPI",
+        "License :: Other/Proprietary License",
+        "Operating System :: OS Independent",
+    ],
+    python_requires=">=3.11",
 )
