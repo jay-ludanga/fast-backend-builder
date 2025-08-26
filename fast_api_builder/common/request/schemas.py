@@ -19,13 +19,13 @@ class Search:
     
     
 @strawberry.input
-class Group:
+class GroupSchema:
     field: str
     format: Optional[str] = None
     
         
 @strawberry.input
-class GroupFunction:
+class GroupSchemaFunction:
     field: str
     function: str
 
@@ -36,8 +36,8 @@ class PaginationParams:
     pageSize: int
     sortBy: Optional[str] = "name"
     sortOrder: Optional[str] = "asc"
-    groupBy: Optional[List[Group]] = None
-    groupFunctions: Optional[List[GroupFunction]] = None
+    groupBy: Optional[List[GroupSchema]] = None
+    groupFunctions: Optional[List[GroupSchemaFunction]] = None
     search: Optional[Search] = None
     filters: Optional[List[Filter]] = None
 

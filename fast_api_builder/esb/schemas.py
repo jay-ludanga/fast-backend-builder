@@ -1,8 +1,10 @@
+from typing import List, Optional, Any
 from uuid import UUID
-from pydantic import BaseModel
-from typing import List, Dict, Optional, Any
 
-class GovEsvData(BaseModel):
+from pydantic import BaseModel
+
+
+class EsbData(BaseModel):
     success: bool
     requestId: Optional[UUID] = None
     esbBody: Any = {}
@@ -10,28 +12,28 @@ class GovEsvData(BaseModel):
     errors: List[int] = []
     validationErrors: List[str] = []
 
-class GovEsvResponse(BaseModel):
-    data: GovEsvData
+class EsbResponse(BaseModel):
+    data: EsbData
     signature: str
     
     
     
-class GovEsvRequestData(BaseModel):
+class EsbRequestData(BaseModel):
     requestId: Optional[UUID] = None
     esbBody: Any
     
-class GovEsvRequest(BaseModel):
-    data: GovEsvRequestData
+class EsbRequest(BaseModel):
+    data: EsbRequestData
     signature: str
     
-class GovEsvAckData(BaseModel):
+class EsbAckData(BaseModel):
     success: bool
     esbBody: Any = {}
     message: str = None
     errors: List[int] = []
     validationErrors: List[str] = []
     
-class GovEsvAckResponse(BaseModel):
-    data: GovEsvAckData
+class EsbAckResponse(BaseModel):
+    data: EsbAckData
     signature: str
     

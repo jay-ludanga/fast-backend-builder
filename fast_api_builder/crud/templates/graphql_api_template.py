@@ -9,7 +9,7 @@ from fast_api_builder.utils.helpers.request import resolve_request_fields
 import strawberry
 
 from fast_api_builder.auth.context import CustomPermissionExtension
-from fast_api_builder.common.request.schemas import Filter, Group, GroupFunction, PaginationParams, Search
+from fast_api_builder.common.request.schemas import Filter, GroupSchema, GroupSchemaFunction, PaginationParams, Search
 from fast_api_builder.common.response.schemas import ApiResponse, PaginatedResponse
 from fast_api_builder.crud.gql_controller import GQLBaseCRUD
 from fast_api_builder.attach.response import _MODEL_AttachmentResponse
@@ -45,13 +45,13 @@ class _MODEL_Query:
             sortBy=sortBy,
             sortOrder=sortOrder,
             groupBy=[
-                Group(
+                GroupSchema(
                     field=g.split(',')[0].strip(),
                     format=(g.split(',') + [None])[1].strip() if len(g.split(',')) > 1 else None
                 ) for g in groupBy
             ] if groupBy else None,
             groupFunctions=[
-                GroupFunction(
+                GroupSchemaFunction(
                     field=gf.split(',')[0].strip(),
                     function=gf.split(',')[1].strip()
                 ) for gf in groupFunctions

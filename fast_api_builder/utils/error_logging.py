@@ -35,7 +35,7 @@ def setup_logger(file_name='error', level=logging.ERROR):
 # Initialize logger by calling setup_logger function
 logger = setup_logger()
 
-govesb_logger = setup_logger('govesb-calls', logging.INFO)
+esb_logger = setup_logger('esb-calls', logging.INFO)
 
 
 # Function to log exceptions
@@ -66,8 +66,8 @@ def log_message(str, *args):
 def log_debug(str, *args):
     logger.debug(str, args, exc_info=True)
     
-def log_govesb_calls(api_code, request, response):
-    govesb_logger.info(f"""
+def log_esb_calls(api_code, request, response):
+    esb_logger.info(f"""
     {f'Consumming from: {api_code}' if api_code else 'Api Call Received'}
     >>> Our Payload:
     {request}

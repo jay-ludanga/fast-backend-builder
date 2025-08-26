@@ -1,37 +1,41 @@
 """
- Wrapper class for Connection with GovEsb
+ Wrapper class for Connection with Esb
 """
 
 import json
-import os
-from base64 import b64decode, b64encode
 import threading
 import time
-from typing import Callable, Awaitable, Dict, Any, Tuple, Optional
 import uuid
-import httpx
-from cryptography.hazmat.primitives.asymmetric import ec, padding
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.backends import default_backend
-from cryptography.exceptions import InvalidSignature
-from fast_api_builder.govesb.schemas import GovEsvAckData, GovEsvAckResponse, GovEsvData, GovEsvRequestData, GovEsvRequest, GovEsvResponse
-from fast_api_builder.utils.error_logging import log_exception, log_govesb_calls, log_message, log_warning
+from base64 import b64decode, b64encode
+from typing import Callable, Awaitable, Dict, Any, Tuple, Optional
 
-class GovEsb:
+import httpx
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import ec
+
+from fast_api_builder.auth.redis import RedisClient
+from fast_api_builder.esb.schemas import EsbAckResponse, EsbData, EsbRequest, EsbResponse
+from fast_api_builder.utils.error_logging import log_exception, log_esb_calls, log_message, log_warning
+
+
+class Esb:
     _instance = None
     _lock = threading.Lock()
 
     def __new__(cls):
-        """Ensures only one instance of GovEsb is created."""
+        """Ensures only one instance of Esb is created."""
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:  # Double-check locking
-                    cls._instance = super(GovEsb, cls).__new__(cls)
+                    cls._instance = super(Esb, cls).__new__(cls)
         return cls._instance
 
     def __init__(self):
         if not hasattr(self, 'initialized'):
             # Initialize the attributes only once
+            self.redis = None
             self.client_id = None
             self.client_secret = None
             self.grant_type = None
@@ -49,28 +53,18 @@ class GovEsb:
 
     @classmethod
     async def get_instance(cls):
-        """Returns the single instance of GovEsb."""
+        """Returns the single instance of Esb."""
         if cls._instance is None or not cls._instance.initialized:
-            # try to initialize first if params are provided
-            if cls._instance and cls._instance.client_id \
-                            and cls._instance.client_secret \
-                            and cls._instance.grant_type \
-                            and cls._instance.token_url:
-                log_warning("GovESB service not initialized. Retrying initialization ...")
-                if not await cls._instance.request_esb_token():
-                    raise Exception("GovEsb service is not initialized.")
-            else:
-                raise Exception("GovEsb service is not initialized.")
-        
-        if time.time() >= cls._instance.token_expiry:
-            if not await cls._instance.request_esb_token():
-                raise Exception("GovEsb token expired. Retry to update")
-        
+            raise Exception("Esb service is not initialized.")
         return cls._instance
 
+    def _token_key(self):
+        return f"esb:token:{self.client_id}"
+
     async def init(self, 
-            client_id: str, 
-            client_secret: str, 
+            redis_cli: RedisClient,
+            client_id: str,
+            client_secret: str,
             grant_type: str, 
             private_key: str, 
             public_key: str, 
@@ -78,10 +72,11 @@ class GovEsb:
             token_url: str, 
             timeout: int = 180
         ):
-        """Initialize the GovESB service asynchronously with the given configuration."""
+        """Initialize the Esb service asynchronously with the given configuration."""
         try:
             if not self.initialized:
                 # Initialize the attributes only once
+                self.redis = redis_cli
                 self.client_id = client_id
                 self.client_secret = client_secret
                 self.grant_type = grant_type if grant_type else 'client_credentials'
@@ -101,12 +96,12 @@ class GovEsb:
                 
                 if await self.request_esb_token():
                     self.initialized = True
-                    log_message(f"GovESB initialized successfully")
+                    log_message(f"Esb initialized successfully")
             else:
-                log_warning("GovESB service is already initialized.")
+                log_warning("Esb service is already initialized.")
             return True
         except Exception as e:
-            log_exception(f"Failed to initialize GovESB: {str(e)}")
+            log_exception(Exception(f"Failed to initialize Esb: {str(e)}"))
             return False
 
     def basic_auth_header(self):
@@ -116,39 +111,46 @@ class GovEsb:
             "Authorization": "Basic %s" % token,
         }
 
-    async def request_esb_token(self):
+    async def request_esb_token(self) -> str | None:
+        """
+        Always request a new token and store it in Redis with expiry.
+        """
         try:
-            # response = requests.post(
-            #     url=self.token_url, 
-            #     data=self.auth_basic_body,
-            #     headers=self.basic_auth_header(),
-            #     timeout=self.timeout
-            # )
-            # response.raise_for_status()
-            
-            # self.access_token = response.json()['access_token']
-            # self.token_expiry = time.time() + response.json()['expires_in'] - 60
-            
-            # return True
-            
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     url=self.token_url,
-                    data=self.auth_basic_body,
-                    headers=self.basic_auth_header(),
-                    timeout=self.timeout
+                    data={
+                        "client_id": self.client_id,
+                        "client_secret": self.client_secret,
+                        "grant_type": self.grant_type,
+                    },
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                    },
+                    timeout=self.timeout,
                 )
                 response.raise_for_status()
-                
-                # Process the JSON response
                 data = response.json()
-                self.access_token = data['access_token']
-                self.token_expiry = time.time() + data['expires_in'] - 60
-                
-                return True
+                access_token = data["access_token"]
+                expires_in = data.get("expires_in", 3600)  # fallback to 1hr
+
+                # Store token in Redis with TTL slightly shorter than actual expiry
+                self.redis.setex(self._token_key(), expires_in - 60, access_token)
+
+                return access_token
         except Exception as e:
-            log_exception(f'GoveESB: Failed to get token {str(e)}')
-            return False
+            log_exception(Exception(f"[ESB] Failed to get token: {e}"))
+            return None
+
+    async def get_esb_token(self) -> str | None:
+        """
+        Get token from Redis if still valid, otherwise refresh.
+        """
+        token = self.redis.get(self._token_key())
+        if token:
+            return token.decode() if isinstance(token, bytes) else token
+        # If no token in Redis (expired or first use), fetch new one
+        return await self.request_esb_token()
         
     @staticmethod
     def get_private_key_from_pem(key):
@@ -241,44 +243,43 @@ class GovEsb:
             "signature": self.sign_payload(data)
         }
 
-    async def consume(self, payload, api_code) -> GovEsvData:
-        
+    async def consume(self, payload, api_code) -> EsbData:
         try:
+            token = await self.get_esb_token()
+            if not token:
+                raise Exception("Failed to acquire ESB token")
+
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    url=f"{self.engine_url}/request", 
-                    # data=self.json_encode(self.build_esb_payload(payload, api_code)),
+                    url=f"{self.engine_url}/request",
                     json=self.build_esb_payload(payload, api_code),
-                    # json={},
                     headers={
-                        "Authorization": f"Bearer {self.access_token}",
-                        'Content-Type': 'application/json'
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json"
                     },
                     timeout=self.timeout
                 )
-            
+
             response.raise_for_status()
-            json = response.json()
-            
-            log_govesb_calls(
+            json_resp = response.json()
+
+            log_esb_calls(
                 api_code=api_code,
                 request=self.build_esb_payload(payload, api_code),
-                response=json
+                response=json_resp
             )
-            
+
             # Verify signature
-            if not self.verify_signature(json['signature'], json['data']):
+            if not self.verify_signature(json_resp['signature'], json_resp['data']):
                 raise Exception('Signature verification failed!')
 
-            return GovEsvResponse(**json).data
-        
+            return EsbResponse(**json_resp).data
+
         except Exception as e:
             log_exception(Exception(
-                (f"Failed to consume: {str(e)}\n"
-                f"Request: {str(response.request.content)}\n"
-                f"Response: {str(response.content)}\n")
+                f"Failed to consume: {str(e)}"
             ))
-            return GovEsvData(
+            return EsbData(
                 success=False,
                 requestId=uuid.uuid4(),
                 message=f"Failed to consume from apiCode: {api_code}",
@@ -292,7 +293,7 @@ class GovEsb:
         process_feedback: Callable[[Dict[str, Any]], Awaitable[Tuple[bool, Optional[str], Dict[str, Any]]]]
     ) -> Any:
         """
-        Process a GovEsvRequest and return an acknowledgment response.
+        Process a EsbRequest and return an acknowledgment response.
 
         This method verifies the signature of the request, processes its `esbBody` 
         asynchronously using a provided callable, and constructs an acknowledgment 
@@ -300,7 +301,7 @@ class GovEsb:
         returns a failure acknowledgment with a default message.
 
         Args:
-            req_body (GovEsvRequest): 
+            req_body (EsbRequest): 
                 The incoming request object containing the data to be processed 
                 and its signature for verification.
             
@@ -312,7 +313,7 @@ class GovEsb:
                 - A dictionary of processed data.
 
         Returns:
-            GovEsvAckResponse: 
+            EsbAckResponse: 
                 A response object that includes the acknowledgment payload, indicating 
                 whether the operation was successful.
 
@@ -328,9 +329,9 @@ class GovEsb:
             
             2. Call the `aconsume` method with the request object and processing function:
             
-                response = await Govesb().aconsume(req_body, process_feedback)
+                response = await Esb().aconsume(req_body, process_feedback)
             
-            3. Return the returned `GovEsvAckResponse` to gov esb:
+            3. Return the returned `EsbAckResponse` to esb:
         """
         # Attempt to verify the signature
         data = req_body.get('data', {})
@@ -350,7 +351,7 @@ class GovEsb:
             message=message
         )
 
-        log_govesb_calls(
+        log_esb_calls(
             api_code=None,
             request=esb_payload,
             response=data
