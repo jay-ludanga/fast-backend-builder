@@ -1,64 +1,163 @@
-Building The package:
+# fast-backend-builder
 
-python setup.py sdist bdist_wheel
+**fast-backend-builder** is a project generator and manager for **FastAPI** with **Tortoise ORM** & **Aerich**.
 
-install the package to your app:
+💡 **FastAPI Backend Builder** – A lightweight library to help you quickly scaffold and build FastAPI projects.
 
-pip install path/to/wheel file
+---
 
-generating Graphql schemas
+## 📌 Overview
+`fast-backend-builder` is designed for **rapid web application development** with FastAPI.  
+It comes bundled with tools and integrations to help developers create well-structured, maintainable, and production-ready FastAPI applications in no time.
 
+The goal is to provide a **one-stop solution** to accelerate prototyping and simplify production deployment.
+
+🔗 **Source Code:** [GitHub Repository](https://github.com/jay-ludanga/fast-backend-builder)
+
+---
+
+## ✨ Features
+
+- 🚀 **CRUD Base with GraphQL (Strawberry)** – Auto-generate and manage CRUD endpoints with GraphQL support  
+- 🔐 **Authentication with JWT** – Built-in secure authentication and token management  
+- ⚡ **Redis Integration** – Caching, sessions, and queue support with Redis  
+- 📂 **File Storage with MinIO** – Easy file upload and attachment handling  
+- 🔗 **ESB Integrations** – Simplified enterprise service bus support  
+- 📬 **BullMQ Integration** – Notifications and queue management out of the box  
+
+---
+
+---
+
+## 🚀 Quick Start
+
+Create FastAPI App for more visit https://fastapi.tiangolo.com/
+
+## ⚙️ Installation
+
+```bash
+
+pip install fast-backend-builder
+```
+
+### 🚀 Setting Up a Custom User Model in FastAPI with Tortoise ORM + FastAPI-Builder
+
+This guide explains how to create a package module for your **User model**, extend it from `AbstractUser`, configure it in Tortoise ORM, and generate GraphQL + migrations.
+
+---
+
+## 📂 Project Structure
+
+```bash
+
+myapp
+  ├── mymodel_package
+  │   ├── __init__.py
+  │   └── models
+  │       └── user.py
+  ├── config
+  │   ├── __init__.py
+  │   └── tortoise.py
+  ├── main.py
+  └── ...
+```
+
+👤 1. Create Your Custom User Model
+
+Inside mymodel_package/models/user.py:
+
+```python
+from fast_backend_builder.models.base_models import AbstractUser
+
+
+class User(AbstractUser):
+    """Custom application user model extending AbstractUser."""
+    pass
+```
+
+⚙️ 2. Set Your User Model in main.py (your main FastAPI file)
+
+At the top of your main.py (before any model imports):
+
+```python
+from fast_backend_builder.utils.config import set_user_model
+from mymodel_package.models.user import User
+
+# Register the User model so fast_backend_builder can resolve it
+set_user_model(User, "models.User")
+```
+
+🗄️ 3. Create Tortoise ORM Config
+
+Inside config/tortoise.py:
+```python
+from decouple import config
+
+db_url = f"postgres://{config('DB_USER')}:{config('DB_PASSWORD')}@{config('DB_HOST')}:{config('DB_PORT')}/{config('DB_NAME')}"
+
+TORTOISE_ORM = {
+    "connections": {"default": db_url},
+    "apps": {
+        "models": {
+            "models": [
+                "fast_backend_builder.models",   # built-in models
+                "mymodel_package.models",    # your custom models
+                "aerich.models",             # migration tracking
+            ],
+            "default_connection": "default",
+        },
+    },
+    "use_tz": True,  # Enable timezone-aware datetimes
+    "timezone": "Africa/Dar_es_Salaam",  # Set to EAT (Dar es Salaam)
+}
+```
+
+🔧 4. Generate CRUD APIs via GraphQL
+
+Run the following to scaffold GraphQL CRUD APIs:
+```bash
+# For your custom User model
+graphql gen:crud-api user_management --module-package=mymodel_package.models --model User
+
+# For fast_backend_builder built-in models
+graphql gen:crud-api user_management --module-package=fast_backend_builder.models --model Group,Permission,Headship
+graphql gen:crud-api workflow --module-package=fast_backend_builder.models --model Workflow,WorkflowStep,Transition,Evaluation
+```
+For your Models
+```bash
+# 
 graphql gen:crud-api <module-name> --model Model1,Model2,Model3
 
-generating graphql schemas with attachments
+# generating graphql schemas with attachments
 
 graphql gen:crud-api <module-name> --model ModelName --with-attachment
+```
 
-for attachments you must have minio server and these .env configs:
+📦 5. Initialize Aerich (DB migrations)
+```bash
+# Initialize Aerich with your Tortoise ORM config
+aerich init -t config.tortoise.TORTOISE_ORM
 
-MINIO_SERVER=ip_address:api_port
-MINIO_BUCKET=backet-name
-MINIO_ACCESS_KEY=minio-username
-MINIO_SECRETE_KEY=minio-password
-MINIO_SECURE=False
+# Create initial migration & database tables
+aerich init-db
+```
 
-You must initialize the MinioService before using it by:
+## 📖 Documentation
+Coming soon...
 
-@app.on_event("startup")
-async def startup_event():
-    # Run the init_minio_service in the background without blocking the app startup
-    asyncio.create_task(init_minio_service())
+---
 
-async def init_minio_service():
-    minio_service = MinioService()
-    try:
-        await minio_service.init(
-            server=config('MINIO_SERVER'),
-            access_key=config('MINIO_ACCESS_KEY'),
-            secret_key=config('MINIO_SECRETE_KEY'),
-            bucket_name=config('MINIO_BUCKET'),
-            secure=config('MINIO_SECURE', cast=bool)
-        )
-    except Exception as e:
-        print(f"Error initializing MinIO service: {e}")
+## 🤝 Contributing
+Contributions, issues, and feature requests are welcome!  
+Feel free to check the [issues page](https://github.com/jay-ludanga/fast-backend-builder/issues).
 
-Making it async will easy your app booting process.
+---
 
-If you need to use the service out of generated crud apis yo do:
+## 📜 License
+This project is licensed under the **Other/Proprietary License**.
 
-For uploading:
 
-file_location, upload_error = await MinioService.get_instance().upload_file(
-    file_name=f"path/to/file.extension",
-    file_data=base64_decoded_file,
-    content_type=attachment.file.content_type
-)
+# Thanks
 
-For downloading:
-
-base64_content = await MinioService.get_instance().download_file("path/to/file.extension")
-
-For deleting:
-
-result = MinioService.get_instance().delete_file("path/to/file.extension")
-
+Thanks for all the contributors that made this library possible,
+also a special mention to Japhary Juma, Shija Ntula and Juma Nassoro.
