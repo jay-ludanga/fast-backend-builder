@@ -9,7 +9,6 @@ from tortoise import fields, models
 
 class Group(TimeStampedModel):
     name = fields.CharField(max_length=100, unique=True)
-    code = fields.CharField(max_length=100, unique=True)
     permissions = fields.ManyToManyField('models.Permission', related_name='groups', through='group_permission')
 
     created_by = fields.ForeignKeyField(

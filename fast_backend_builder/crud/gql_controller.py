@@ -7,11 +7,9 @@ from uuid import UUID
 
 from tortoise.exceptions import DoesNotExist, FieldError, IntegrityError, ValidationError
 from tortoise.queryset import QuerySet, Q
-from tortoise.contrib.pydantic import *
 from tortoise.fields.relational import ForeignKeyFieldInstance, ManyToManyFieldInstance
 
 
-# from tortoise.query_utils import Q as Q
 from tortoise.expressions import F as FExpression
 from tortoise.functions import Function, Count, Sum, Avg, Min, Max, Concat
 import re
@@ -56,7 +54,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
         """
         try:
 
-            current_user = Auth.user_data()
+            current_user = Auth.user()
             user_id = current_user.get('user_id')
             username = current_user.get('email')
 
@@ -147,7 +145,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
         try:
             created_objects = []
 
-            current_user = Auth.user_data()
+            current_user = Auth.user()
             user_id = current_user.get('user_id')
             username = current_user.get('email')
 
@@ -239,7 +237,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
                 obj_data[key] = value.value
         try:
 
-            current_user = Auth.user_data()
+            current_user = Auth.user()
             user_id = current_user.get('user_id')
             username = current_user.get('email')
 
@@ -629,7 +627,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
         """
         try:
 
-            current_user = Auth.user_data()
+            current_user = Auth.user()
             user_id = current_user.get('user_id')
             username = current_user.get('email')
 
@@ -677,18 +675,20 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             data=None
         )
 
-    def parse_integrity_error(self, e: IntegrityError):
-        error_message = str(e).lower()  # Lowercase the message for easier matching
+    def parse_integrity_error(self, e: IntegrityError) -> str:
+        error_message = str(e).lower()  # normalize
 
-        if "unique constraint" in error_message:
+        if "unique" in error_message:
             return f"A {self.model.Meta.verbose_name} with the same details already exists."
 
-        elif "foreign key constraint" in error_message:
-            return f"The specified associated details does not exist."
+        if "foreign key" in error_message:
+            return f"The specified related record does not exist."
 
-        elif "not null" in error_message:
+        if "not null" in error_message:
             return f"One or more required fields cannot be null."
-        elif "check constraint" in error_message:
-            return f"The provided data does not meet the validation requirements."
-        else:
-            return f"An unexpected error occurred."
+
+        if "check constraint" in error_message:
+            return f"The provided data does not meet validation requirements."
+
+        # default / unknown constraint
+        return "An unexpected database error occurred."

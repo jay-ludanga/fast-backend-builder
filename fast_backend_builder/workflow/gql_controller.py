@@ -43,7 +43,7 @@ class TransitionBaseController(Generic[ModelType]):
         Creates new transition for ModelType.
         """
         try:
-            current_user = Auth.user_data()
+            current_user = Auth.user()
             user_id = current_user.get('user_id')
             username = current_user.get('email')
 
