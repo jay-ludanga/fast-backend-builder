@@ -321,5 +321,5 @@ class TimeStampedModel(HeadshipModel):
 from .attachment import Attachment
 from .group_permissions import Group, Permission
 from .headship import Headship
-from .notification import NotificationTemplate
+from .notification import NotificationTemplate,FailedTask
 from .workflow import Workflow, WorkflowStep, Transition, Evaluation

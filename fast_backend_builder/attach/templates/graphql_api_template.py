@@ -10,9 +10,9 @@ from src.modules.resources.schema import ApiResponse
 # Define a Strawberry Type for the API Response
 @strawberry.type
 class AttachmentType:
-    id: int
+    id: str
     title: str
-    parent_id: int
+    parent_id: str
 
 @strawberry.type
 class ApiResponseType:
@@ -25,7 +25,7 @@ class ApiResponseType:
 # Define a GraphQL resolver function for uploading a single attachment
 @strawberry.mutation
 def upload_single_attachment(
-    parent_id: int,
+    parent_id: str,
     file: UploadFile,
     title: str,
     current_user: dict = Depends(get_current_user),
@@ -47,7 +47,7 @@ def upload_single_attachment(
 # Mutation for multiple attachments
 @strawberry.mutation
 def upload_attachments(
-    parent_id: int,
+    parent_id: str,
     files: List[UploadFile],
     titles: List[str],
     current_user: dict = Depends(get_current_user),
@@ -69,17 +69,17 @@ def upload_attachments(
 
 # Resolver to fetch attachments
 @strawberry.type
-def get_attachments(parent_id: int, current_user: dict = Depends(get_current_user), controller=Depends()):
+def get_attachments(parent_id: str, current_user: dict = Depends(get_current_user), controller=Depends()):
     return controller.get_attachments(parent_id, "parent_id_name")
 
 # Resolver to download an attachment
 @strawberry.mutation
-def download_attachment(attachment_id: int, current_user: dict = Depends(get_current_user), controller=Depends()):
+def download_attachment(attachment_id: str, current_user: dict = Depends(get_current_user), controller=Depends()):
     return controller.download_attachment(attachment_id)
 
 # Resolver to delete an attachment
 @strawberry.mutation
-def delete_attachment(attachment_id: int, current_user: dict = Depends(get_current_user), controller=Depends()):
+def delete_attachment(attachment_id: str, current_user: dict = Depends(get_current_user), controller=Depends()):
     return controller.remove_attachment(attachment_id)
 
 
