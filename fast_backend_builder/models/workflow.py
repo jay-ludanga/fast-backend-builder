@@ -11,7 +11,6 @@ from fast_backend_builder.workflow.exceptions import NoCurrentStepError, Missing
 
 '''List of Models'''
 
-User = "models.User"  # lazy reference
 
 
 class Workflow(TimeStampedModel):
@@ -47,7 +46,7 @@ class Workflow(TimeStampedModel):
         final_step = await WorkflowStep.filter(workflow=self).order_by('-order').first()
         return final_step
 
-    async def can_transit(self, current_step: 'WorkflowStep', next_step_obj: 'WorkflowStep', user: User,
+    async def can_transit(self, current_step: 'WorkflowStep', next_step_obj: 'WorkflowStep', user,
                           remarks) -> bool:
         # Get the transition that is allowed from this step to the next step
         transition = await Transition.filter(from_step=current_step, to_step=next_step_obj).prefetch_related(
@@ -91,6 +90,8 @@ class Workflow(TimeStampedModel):
                 raise MissingStepError(next_step_obj)
 
             # Check if the user exists and optimize user import
+            from fast_backend_builder.utils.config import get_user_model
+            User = get_user_model()
             user = await User.get_or_none(id=user_id)
             if not user:
                 raise WorkflowException(f"User does not exist.")
