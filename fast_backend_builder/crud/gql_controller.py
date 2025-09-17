@@ -56,7 +56,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
 
             current_user = Auth.user()
             user_id = current_user.get('user_id')
-            username = current_user.get('email')
+            username = current_user.get('username')
 
             data = obj_in.__dict__
             # according shija ntula we comment here waiting front end to  bring enum
@@ -147,7 +147,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
 
             current_user = Auth.user()
             user_id = current_user.get('user_id')
-            username = current_user.get('email')
+            username = current_user.get('username')
 
             for obj_in in objs_in:
                 data = obj_in.__dict__
@@ -239,7 +239,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
 
             current_user = Auth.user()
             user_id = current_user.get('user_id')
-            username = current_user.get('email')
+            username = current_user.get('username')
 
             obj = await self.model.get(id=obj_data.get('id'))
 
@@ -629,7 +629,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
 
             current_user = Auth.user()
             user_id = current_user.get('user_id')
-            username = current_user.get('email')
+            username = current_user.get('username')
 
             obj = await self.model.get(id=id)
             obj_dict = obj.__dict__

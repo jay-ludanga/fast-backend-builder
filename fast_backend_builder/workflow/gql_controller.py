@@ -45,7 +45,7 @@ class TransitionBaseController(Generic[ModelType]):
         try:
             current_user = Auth.user()
             user_id = current_user.get('user_id')
-            username = current_user.get('email')
+            username = current_user.get('username')
 
             async with in_transaction() as connection:
 
