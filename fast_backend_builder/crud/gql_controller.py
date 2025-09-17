@@ -462,6 +462,21 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
                 query = query.filter(~Q(**{field: value}))
             elif comparator in ['icontains', 'startswith', 'endswith', 'contains', 'gte', 'lte']:
                 query = query.filter(**{f"{field}__{comparator}": value})
+
+            elif comparator == 'bool':
+                if str(value).lower() in ("true", "1", "yes"):
+                    query = query.filter(**{field: True})
+                elif str(value).lower() in ("false", "0", "no"):
+                    query = query.filter(**{field: False})
+                else:
+                    raise ValueError(f"Invalid boolean value: {value}")
+            elif comparator == 'date':
+                from datetime import datetime
+                try:
+                    date_value = datetime.fromisoformat(value).date()
+                except ValueError:
+                    raise ValueError(f"Invalid date format: {value}, expected YYYY-MM-DD")
+                query = query.filter(**{field: date_value})
             else:
                 # Optional: log or raise an error for unsupported comparators
                 raise ValueError(f"Unsupported filter comparator: {comparator}")

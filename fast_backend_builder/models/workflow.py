@@ -250,9 +250,11 @@ class Evaluation(TimeStampedModel):
 
     async def notify(self):
         notification_content = self.workflow_step.notification_content_type
+        # Fetch the workflow object explicitly
+        workflow = await self.workflow_step.workflow
         message = {
             "job_name": f"{self.object_name} Workflow Notification",
-            "channel_type": self.workflow_step.workflow.notification_channel,
+            "channel_type": workflow.notification_channel,
             "recipient": None,
             "content_type": notification_content,
             "args": {
