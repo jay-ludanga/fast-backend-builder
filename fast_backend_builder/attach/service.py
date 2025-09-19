@@ -1,6 +1,6 @@
-
 import base64
 from minio import Minio
+from minio.commonconfig import CopySource
 from minio.error import S3Error
 import asyncio
 import threading
@@ -9,6 +9,7 @@ from io import BytesIO
 from datetime import timedelta
 
 from fast_backend_builder.utils.error_logging import log_exception
+
 
 class MinioService:
     _instance = None
@@ -70,11 +71,11 @@ class MinioService:
             # Use BytesIO to simulate async operation (Minio SDK is not natively async)
             data = BytesIO(file_data)
             await asyncio.to_thread(
-                self.minio_client.put_object, 
-                self.bucket_name, 
-                file_name, 
-                data, 
-                len(file_data), 
+                self.minio_client.put_object,
+                self.bucket_name,
+                file_name,
+                data,
+                len(file_data),
                 content_type=content_type
             )
             print(f"File '{file_name}' saved successfully.")
@@ -115,7 +116,6 @@ class MinioService:
             log_exception(e)
             return False  # Return False if failed
 
-
     async def download_byte_file(self, file_name: str):
         """
         Download a file from the MinIO bucket asynchronously and return raw bytes.
@@ -155,6 +155,74 @@ class MinioService:
         except S3Error as e:
             log_exception(e)
             return None
+
+    async def rename_folder(self, old_folder: str, new_folder: str):
+        """
+        Rename/move all objects under old_folder to new_folder.
+        Example:
+            old_folder = "students/john.doe2025/"
+            new_folder = "students/MNMA/BITC9.COB/5335/24/"
+        """
+        self._ensure_initialized()
+
+        try:
+            # List all objects with the prefix (old_folder)
+            objects = await asyncio.to_thread(
+                lambda: self.minio_client.list_objects(self.bucket_name, prefix=old_folder, recursive=True)
+            )
+
+            for obj in objects:
+                old_file_name = obj.object_name
+                # Replace the old_folder prefix with new_folder
+                new_file_name = old_file_name.replace(old_folder, new_folder, 1)
+
+                # Copy old object to new object
+                await asyncio.to_thread(
+                    self.minio_client.copy_object,
+                    self.bucket_name,
+                    new_file_name,
+                    CopySource(self.bucket_name, old_file_name)  # 👈 FIX
+                )
+
+                # Delete old object
+                await asyncio.to_thread(
+                    self.minio_client.remove_object,
+                    self.bucket_name,
+                    old_file_name
+                )
+                print(f"Renamed '{old_file_name}' -> '{new_file_name}'")
+
+            return True, None
+        except S3Error as e:
+            log_exception(e)
+            return False, f"Error renaming folder '{old_folder}' to '{new_folder}'"
+
+    async def rename_file(self, old_file_name: str, new_file_name: str):
+        """
+        Rename or move a file in the MinIO bucket asynchronously.
+        This is done by copying the object to the new name and deleting the old one.
+        """
+        self._ensure_initialized()
+
+        try:
+            # Copy old object to new object
+            await asyncio.to_thread(
+                self.minio_client.copy_object,
+                self.bucket_name,
+                new_file_name,  # destination object name
+                CopySource(self.bucket_name, old_file_name)  # source object
+            )
+            # Delete old object
+            await asyncio.to_thread(
+                self.minio_client.remove_object,
+                self.bucket_name,
+                old_file_name
+            )
+            print(f"File renamed from '{old_file_name}' to '{new_file_name}' successfully.")
+            return True, None
+        except S3Error as e:
+            log_exception(e)
+            return False, f"Error renaming file '{old_file_name}' to '{new_file_name}'"
 
     def _ensure_initialized(self):
         """Check if the MinIO service is initialized, else raise an error."""

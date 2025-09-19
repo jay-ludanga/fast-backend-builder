@@ -21,7 +21,7 @@ class MissingStepError(WorkflowException):
     """Raised when a required workflow step is missing."""
     def __init__(self, step_code):
         self.step_code = step_code
-        super().__init__(f"Workflow step with code '{self.step_code}' not found.")
+        super().__init__(f"Supplied Workflow step with code not found.")
 
 class MissingRemarkError(WorkflowException):
     """Raised when a remark is required but not provided."""

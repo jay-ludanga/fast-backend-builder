@@ -1,29 +1,17 @@
-import base64
-from enum import Enum
-from io import BytesIO
-import os
-from typing import Any, Callable, Dict, Generic, Optional, Type
+from typing import Generic, Type
 
-from pydantic import ValidationError
-from strawberry import Info
-from tortoise.exceptions import DoesNotExist, IntegrityError
+from tortoise.exceptions import DoesNotExist, IntegrityError, ValidationError
 from tortoise.transactions import in_transaction
-from decouple import config
-from fast_backend_builder.attach.request import AttachmentUpload
-from fast_backend_builder.attach.service import MinioService
+
 from fast_backend_builder.auth.auth import Auth
-from fast_backend_builder.models.workflow import Evaluation, Workflow
-
-from fast_backend_builder.utils.error_logging import log_exception
-
-
 from fast_backend_builder.common.response.codes import ResponseCode
-from fast_backend_builder.common.response.schemas import ApiResponse, PaginatedResponse
+from fast_backend_builder.common.response.schemas import ApiResponse
 from fast_backend_builder.common.schemas import ModelType
-
+from fast_backend_builder.models.workflow import Evaluation, Workflow
+from fast_backend_builder.utils.error_logging import log_exception
 from fast_backend_builder.utils.helpers.log_activity import log_user_activity
-from fast_backend_builder.workflow.request import EvaluationStatus
 from fast_backend_builder.workflow.exceptions import WorkflowException
+from fast_backend_builder.workflow.request import EvaluationStatus
 from fast_backend_builder.workflow.response import EvaluationStatusResponse
 
 
@@ -120,7 +108,6 @@ class TransitionBaseController(Generic[ModelType]):
                 data=False
             )
         except ValidationError as e:
-            log_exception("type... ", Exception(type(e)))
             log_exception(e)
             # Check the exception message to identify a unique constraint violation
             return ApiResponse(

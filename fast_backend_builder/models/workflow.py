@@ -56,7 +56,7 @@ class Workflow(TimeStampedModel):
             return False  # No transition found
 
         if transition.require_remark and not remarks:
-            return False  # Transition requires a remark but none was provided
+            raise MissingRemarkError()
 
         # Optimize group retrieval using a single query with set comparison for user groups
         user_groups = await user.groups.all().values_list('id', flat=True)
