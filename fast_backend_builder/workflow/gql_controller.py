@@ -125,7 +125,7 @@ class TransitionBaseController(Generic[ModelType]):
                 data=None
             )
 
-    async def get_transitions(self, model_id: int) -> ApiResponse:
+    async def get_transitions(self, model_id: str) -> ApiResponse:
         try:
             evaluation_status = await Evaluation.filter(object_id=model_id, object_name=self.model.__name__).select_related('user','workflow_step')
             data_list = [EvaluationStatusResponse(

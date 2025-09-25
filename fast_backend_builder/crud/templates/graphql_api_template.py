@@ -23,7 +23,7 @@ controller = GQLBaseCRUD(Model)
 @strawberry.type
 class _MODEL_Query:
     @strawberry.field(extensions=[CustomPermissionExtension(['view__flatmodel_'])])
-    async def get__model__by_id(self, info, id: int) -> ApiResponse[ResponseType]:
+    async def get__model__by_id(self, info, id: str) -> ApiResponse[ResponseType]:
         fields = resolve_request_fields(info)
         return await controller.get(id, fields)
     
@@ -110,17 +110,17 @@ class _MODEL_Mutation:
         return await controller.update(input_data)
 
     @strawberry.mutation(extensions=[CustomPermissionExtension(['delete__flatmodel_'])])
-    async def delete__model_(self, id: int) -> ApiResponse[bool]:
+    async def delete__model_(self, id: str) -> ApiResponse[bool]:
         return await controller.delete(id)
     
     '''ATTACHMENT_MUTATIONS'''
     @strawberry.mutation(extensions=[CustomPermissionExtension(['upload__flatmodel__attachment'])])
     @validate_input(_MODEL_Attachment)
-    async def upload__model__attachment(self, input_data: _MODEL_Attachment, _model__id: int) -> ApiResponse[_MODEL_AttachmentResponse]:
+    async def upload__model__attachment(self, input_data: _MODEL_Attachment, _model__id: str) -> ApiResponse[_MODEL_AttachmentResponse]:
         return await controller.upload_attachment(_model__id, input_data)
 
     @strawberry.mutation(extensions=[CustomPermissionExtension(['delete__flatmodel__attachment'])])
-    async def delete__model__attachment(self, attachment_id: int) -> ApiResponse[bool]:
+    async def delete__model__attachment(self, attachment_id: str) -> ApiResponse[bool]:
         return await controller.delete_attachment(attachment_id)
     '''ATTACHMENT_MUTATIONS_END'''
     

@@ -116,7 +116,7 @@ class Esb:
         Always request a new token and store it in Redis with expiry.
         """
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=False) as client:
                 response = await client.post(
                     url=self.token_url,
                     data={
@@ -124,9 +124,7 @@ class Esb:
                         "client_secret": self.client_secret,
                         "grant_type": self.grant_type,
                     },
-                    headers={
-                        "Content-Type": "application/x-www-form-urlencoded",
-                    },
+                    headers=self.basic_auth_header(),
                     timeout=self.timeout,
                 )
                 response.raise_for_status()
