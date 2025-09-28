@@ -69,7 +69,7 @@ class Esb:
                                     'grant_type': self.grant_type}
             self.private_key = self.get_private_key_from_pem(self.private_key_file)
             self.public_key = self.get_public_key_from_pem(self.public_key_file)
-            token = self.redis.get(self._token_key())
+            token = await self.redis.get(self._token_key())
             if token:
                 self.access_token = token.decode() if isinstance(token, bytes) else token
                 log_message("Found existing ESB token in Redis")
@@ -98,7 +98,7 @@ class Esb:
                 data = response.json()
                 access_token = data["access_token"]
                 expires_in = data.get("expires_in", 3600)
-                self.redis.setex(self._token_key(), expires_in - 60, access_token)
+                await self.redis.setex(self._token_key(), expires_in - 60, access_token)
                 return access_token
         except Exception as e:
             log_exception(Exception(f"[ESB] Failed to get token: {e}"))
@@ -110,7 +110,7 @@ class Esb:
         async with self._token_lock:
             if self.access_token:
                 return self.access_token
-            token = self.redis.get(self._token_key())
+            token = await self.redis.get(self._token_key())
             if token:
                 self.access_token = token.decode() if isinstance(token, bytes) else token
                 return self.access_token
