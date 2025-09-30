@@ -35,7 +35,7 @@ class TransitionBaseController(Generic[ModelType]):
             user_id = current_user.get('user_id')
             username = current_user.get('username')
 
-            async with in_transaction() as connection:
+            async with in_transaction("default")as connection:
 
                 workflow: Workflow = await Workflow.filter(code=self.model.__name__, is_active=True).first()
 
