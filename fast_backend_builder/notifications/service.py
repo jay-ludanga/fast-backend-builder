@@ -102,4 +102,47 @@ class NotificationService:
             raise Exception("Notification service is not initialized.")
 
 
+    async def put_bulk_messages_on_queue(
+            self,
+            queue_name: str,
+            messages: list[dict],
+            job_name_field: str = "job_name",
+    ):
+        """
+        Adds multiple jobs to the queue efficiently using addBulk
+        """
+        if not self.initialized:
+            raise Exception("Notification service is not initialized.")
+
+        try:
+            queue = Queue(queue_name, {"connection": self.redis_conn})
+
+            # Prepare bulk jobs
+            jobs_bulk = [
+                {
+                    "name": msg.get(job_name_field, "default_job"),
+                    "data": msg,
+                    "opts": msg.get("opts", {})
+                }
+                for msg in messages
+            ]
+
+            # Add all jobs at once
+            result = await queue.addBulk(jobs_bulk)
+            print(f"Added {len(result)} jobs to {queue_name} successfully")
+            await queue.close()
+            return result
+        except Exception as e:
+            log_exception(e)
+            # optionally log FailedTask for each message
+            for msg in messages:
+                await FailedTask.create(
+                    name=msg.get(job_name_field, "default_job"),
+                    func="notifications.NotificationService.put_bulk_messages_on_queue",
+                    args=pickle.dumps({"queue": queue_name, "message": msg}),
+                    result=str(e)
+                )
+            return []
+
+
 notification_service = NotificationService()
