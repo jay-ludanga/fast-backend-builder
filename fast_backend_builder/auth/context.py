@@ -87,7 +87,7 @@ class CustomPermissionExtension(FieldExtension):
                 return await next_(root, info, **kwargs)
             else:
                 return ApiResponse(
-                    code=ResponseCode.UNAUTHORIZED,
+                    code=ResponseCode.RESTRICTED_ACCESS,
                     status=False,
                     message="Restricted Access",
                     data=None,
