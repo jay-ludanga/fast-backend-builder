@@ -21,9 +21,6 @@ class Headship(TimeStampedModel):
         related_name="headships_created",
     )
 
-    def __str__(self):
-        return f"{self.user.username}: {self.headship_type}"
-
     class Meta:
         table = "headships"
         verbose_name = "Headship"
