@@ -267,7 +267,9 @@ class Evaluation(TimeStampedModel):
         notification = NotificationService.get_instance()
 
         # Normalize channels to a list
-        channels = await self.workflow_step.workflow.notification_channel
+        workflow_step = await self.workflow_step
+        workflow = await workflow_step.workflow
+        channels = workflow.notification_channel or []
         if isinstance(channels, str):
             channels = [channels]
 
