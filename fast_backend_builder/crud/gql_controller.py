@@ -477,6 +477,20 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
                 except ValueError:
                     raise ValueError(f"Invalid date format: {value}, expected YYYY-MM-DD")
                 query = query.filter(**{field: date_value})
+
+            elif comparator == 'in':
+                # 👇 Handle "in" comparator with stringified array value
+                try:
+                    # If input is like '["a", "b", "c"]' or "[1, 2, 3]"
+                    parsed_values = json.loads(value) if isinstance(value, str) else value
+
+                    # Ensure it's a list
+                    if not isinstance(parsed_values, (list, tuple)):
+                        raise ValueError(f'"in" comparator expects a list or array, got {type(parsed_values).__name__}')
+
+                    query = query.filter(**{f"{field}__in": parsed_values})
+                except json.JSONDecodeError:
+                    raise ValueError(f"Invalid JSON array format for 'in' comparator: {value}")
             else:
                 # Optional: log or raise an error for unsupported comparators
                 raise ValueError(f"Unsupported filter comparator: {comparator}")
