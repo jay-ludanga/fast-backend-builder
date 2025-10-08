@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='fast-backend-builder',
-    version='0.1.3.20',
+    version='0.1.3.21',
     packages=find_packages(),
     install_requires=[
         'fastapi==0.116.1',

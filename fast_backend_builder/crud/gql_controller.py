@@ -9,11 +9,9 @@ from tortoise.exceptions import DoesNotExist, FieldError, IntegrityError, Valida
 from tortoise.queryset import QuerySet, Q
 from tortoise.fields.relational import ForeignKeyFieldInstance, ManyToManyFieldInstance
 
-
 from tortoise.expressions import F as FExpression
 from tortoise.functions import Function, Count, Sum, Avg, Min, Max, Concat
 import re
-
 
 from fastapi.encoders import jsonable_encoder
 
@@ -368,7 +366,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             query = self.apply_filters(query, pagination_params)  # No await
             query = self.apply_sorting(query, pagination_params)  # No await
             query = self.apply_grouping(query, pagination_params)  # No await
-            
+
             data, count = await self.paginate_data(query, pagination_params)  # Execute query here
             return await self.get_final_queryset(data, count, fields)
         except FieldError as e:
@@ -451,6 +449,29 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             value = filter.value
             comparator = filter.comparator
 
+            # Helper: parse stringified JSON or CSV safely
+            def parse_list(value):
+                if isinstance(value, str):
+                    val = value.strip()
+                    # remove extra surrounding quotes
+                    if val.startswith('"') and val.endswith('"'):
+                        val = val[1:-1]
+                    # unescape inner quotes
+                    val = val.replace('\\"', '"')
+                    # parse JSON array
+                    try:
+                        parsed = json.loads(val)
+                        if not isinstance(parsed, (list, tuple)):
+                            raise ValueError()
+                        return parsed
+                    except Exception:
+                        # fallback to comma-separated
+                        return [v.strip() for v in val.split(',') if v.strip()]
+                elif isinstance(value, (list, tuple)):
+                    return value
+                else:
+                    raise ValueError('"in"/"nin" comparator expects a list or string')
+
             if comparator == 'exclude':
                 query = query.exclude(**{field: value})
             elif comparator == 'exact':
@@ -478,19 +499,13 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
                     raise ValueError(f"Invalid date format: {value}, expected YYYY-MM-DD")
                 query = query.filter(**{field: date_value})
 
-            elif comparator == 'in':
-                # 👇 Handle "in" comparator with stringified array value
-                try:
-                    # If input is like '["a", "b", "c"]' or "[1, 2, 3]"
-                    parsed_values = json.loads(value) if isinstance(value, str) else value
 
-                    # Ensure it's a list
-                    if not isinstance(parsed_values, (list, tuple)):
-                        raise ValueError(f'"in" comparator expects a list or array, got {type(parsed_values).__name__}')
-
+            elif comparator in ['in', 'nin']:
+                parsed_values = parse_list(value)
+                if comparator == 'in':
                     query = query.filter(**{f"{field}__in": parsed_values})
-                except json.JSONDecodeError:
-                    raise ValueError(f"Invalid JSON array format for 'in' comparator: {value}")
+                else:  # 'nin'
+                    query = query.exclude(**{f"{field}__in": parsed_values})
             else:
                 # Optional: log or raise an error for unsupported comparators
                 raise ValueError(f"Unsupported filter comparator: {comparator}")
@@ -534,7 +549,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
         """Applies grouping and aggregation to the query, including CONCAT and GROUP_CONCAT."""
         groups = pagination_params.groupBy
         group_functions = pagination_params.groupFunctions
-        
+
         if groups:
             for group in groups:
                 field = group.field
@@ -612,6 +627,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             grouped_field=FExpression(f"FLOOR({field} / {range_step}) * {range_step}")
         )
         return query.group_by("grouped_field")
+
     def get_function(self, name: str) -> Function:
         """Retrieve the appropriate function based on the name."""
         function_map = {
@@ -664,7 +680,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             obj_dict = obj.__dict__
             # Preprocess obj_dict to convert datetime objects to strings
             for key, value in obj_dict.items():
-                if isinstance(value, (datetime,date)):
+                if isinstance(value, (datetime, date)):
                     obj_dict[key] = value.isoformat()  # Convert to ISO 8601 string
                 elif isinstance(value, UUID):  # Handle UUID
                     obj_dict[key] = str(value)  # Convert to string
