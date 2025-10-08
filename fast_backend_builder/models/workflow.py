@@ -6,6 +6,7 @@ from tortoise.functions import Max  # Import Max function
 
 from fast_backend_builder.models import TimeStampedModel
 from fast_backend_builder.notifications.service import NotificationService
+from fast_backend_builder.utils.enums import NotificationChannel
 from fast_backend_builder.workflow.exceptions import NoCurrentStepError, MissingStepError, PermissionDeniedError, \
     MissingRemarkError, WorkflowException
 
@@ -251,60 +252,67 @@ class Evaluation(TimeStampedModel):
     async def notify(self):
         notification_content = self.workflow_step.notification_content_type
         # Fetch the workflow object explicitly
-        workflow = await self.workflow_step.workflow
-        message = {
+        """Send notifications to applicant and evaluators based on workflow step flags."""
+        message_template = {
             "job_name": f"{self.object_name} Workflow Notification",
-            "channel_type": workflow.notification_channel,
+            "notification_channel": None,
             "recipient": None,
             "content_type": notification_content,
             "args": {
                 "client_name": None,
-                "actor_name": None
+                "actor_name": "ARMS Team"
             }
         }
 
-        """ Send a notification if the workflow step requires it. """
+        notification = NotificationService.get_instance()
+
+        # Normalize channels to a list
+        workflow_step = await self.workflow_step
+        workflow = await workflow_step.workflow
+        channels = workflow.notification_channel or []
+        if isinstance(channels, str):
+            channels = [channels]
+
+        # Helper to send notifications to a list of users over multiple channels
+        async def send_to_users(users: list):
+            for user in users:
+                for channel in channels:
+                    # Skip SMS if phone number is missing
+                    if channel == NotificationChannel.SMS and not user.phone_number:
+                        continue
+
+                    message_copy = message_template.copy()
+                    message_copy["args"] = message_template["args"].copy()
+                    message_copy["args"]["client_name"] = user.get_short_name()
+
+                    if channel == NotificationChannel.EMAIL:
+                        message_copy["recipient"] = user.email
+                    elif channel == NotificationChannel.SMS:
+                        message_copy["recipient"] = user.phone_number
+
+                    message_copy["notification_channel"] = channel
+                    await notification.put_message_on_queue('Notifications', message_copy)
+
+        # Notify applicant
         if self.workflow_step.notify_applicant:
-            # Implement the logic to send an email or other form of notification
-            first_evaluation = await Evaluation.filter(object_id=self.object_id,
-                                                       object_name=self.object_name).select_related('user').order_by(
-                'created_at').first()
+            first_evaluation = await Evaluation.filter(
+                object_id=self.object_id,
+                object_name=self.object_name
+            ).select_related('user').order_by('created_at').first()
 
             if first_evaluation:
-                message[
-                    "recipient"] = first_evaluation.user.email  # Assuming you have a list of recipients in the messagefirst_evaluation.user.email
-                message["args"]["actor_name"] = "ARMS Team"
-                message["args"]["client_name"] = first_evaluation.user.get_short_name()
+                await send_to_users([first_evaluation.user])
 
-                # Now you can pass the message to your notification sending logic, e.g.:
-                notification = NotificationService.get_instance()
-                await notification.put_message_on_queue('Notifications', message)
-
+        # Notify evaluators
         if self.workflow_step.notify_evaluator:
-            # Fetch the next transition with prefetching of related groups and users
-            next_transition = await Transition.filter(from_step=self.workflow_step, direction='FORWARD') \
-                .prefetch_related('groups__users') \
-                .order_by('id') \
-                .first()
+            next_transition = await Transition.filter(
+                from_step=self.workflow_step,
+                direction='FORWARD'
+            ).prefetch_related('groups__users').order_by('id').first()
 
             if next_transition:
-                # Collect all the users from the groups linked to this transition asynchronously
                 users = set()
+                for group in await next_transition.groups.all():
+                    users.update(await group.users.all())
 
-                # Asynchronously iterate through the groups
-                groups = await next_transition.groups.all()
-
-                for group in groups:
-                    group_users = await group.users.all()  # Fetch users for each group asynchronously
-                    users.update(group_users)
-
-                # Now you have the set of users, proceed with your notification logic
-                recipient_users = [(user.id, user.email, user.get_short_name()) for user in users]
-                for user_id, email, short_name in recipient_users:
-                    message["recipient"] = email
-                    message["args"]["actor_name"] = "ARMS Team"
-                    message["content_type"] = notification_content
-                    message["args"]["client_name"] = short_name  # Personalize message with the user's short name
-                    # Pass the message to your notification sending logic
-                    notification = NotificationService.get_instance()
-                    await notification.put_message_on_queue('Notifications', message)
+                await send_to_users(list(users))
