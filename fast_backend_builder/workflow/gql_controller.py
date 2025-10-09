@@ -51,7 +51,9 @@ class TransitionBaseController(Generic[ModelType]):
 
             obj = await self.model.get(id=evaluation_status.object_id)
 
-            await self.before_transit(evaluation_status, obj)
+            res = await self.before_transit(evaluation_status, obj)
+            if isinstance(res, ApiResponse):
+                return res  # already a structured response
 
             async with in_transaction("default")as connection:
 
