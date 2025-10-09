@@ -22,7 +22,21 @@ class TransitionBaseController(Generic[ModelType]):
 
     async def after_transit(self, obj: Type[ModelType], evaluation: Evaluation, connection):
         """
+        Function to be called after a transition is completed.
         @param: connection: db transaction connection
+        """
+        pass
+
+    async def before_transit(self, evaluation_status: EvaluationStatus, obj: ModelType):
+        """
+        Function to be called before a transition is performed
+        @param: evaluation_status: input transition status
+        @param: obj: Model object
+        Args:
+            evaluation_status:  EvaluationStatus
+            obj: Model object
+        Returns:
+
         """
         pass
 
@@ -35,13 +49,15 @@ class TransitionBaseController(Generic[ModelType]):
             user_id = current_user.get('user_id')
             username = current_user.get('username')
 
+            obj = await self.model.get(id=evaluation_status.object_id)
+
+            await self.before_transit(evaluation_status, obj)
+
             async with in_transaction("default")as connection:
 
                 workflow: Workflow = await Workflow.filter(code=self.model.__name__, is_active=True).first()
 
                 if workflow:
-
-                    obj = await self.model.get(id=evaluation_status.object_id)
 
                     evaluation: Evaluation = await workflow.transit(
                         object_id=evaluation_status.object_id,
