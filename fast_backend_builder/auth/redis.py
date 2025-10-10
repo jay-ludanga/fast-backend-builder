@@ -33,6 +33,26 @@ class RedisClient:
             log_message("Connected to Redis (async)")
 
     # --------------------
+    # Counter operations
+    # --------------------
+    async def incr_key(self, key: str, expire: Optional[int] = None) -> int:
+        """
+        Atomically increments a numeric counter stored at `key`.
+        Returns the new incremented value.
+
+        Args:
+            key (str): The Redis key for the counter
+            expire (int, optional): Expiry time in seconds (optional)
+
+        Example:
+            serial = await redis_client.incr_key("batch_counter:EMP001:2024/2025")
+        """
+        new_value = await self.client.incr(key)
+        if expire:
+            await self.client.expire(key, expire)
+        return new_value
+
+    # --------------------
     # Basic key operations
     # --------------------
     async def set(self, key: str, value: str, ex: Optional[int] = None):
