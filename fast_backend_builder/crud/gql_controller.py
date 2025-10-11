@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Generic, Tuple, Type, TypeVar, Optional, Dict, Any, Callable, List, Awaitable
 from uuid import UUID
 
+from tortoise import fields
 from tortoise.exceptions import DoesNotExist, FieldError, IntegrityError, ValidationError
 from tortoise.queryset import QuerySet, Q
 from tortoise.fields.relational import ForeignKeyFieldInstance, ManyToManyFieldInstance
@@ -448,6 +449,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             field = filter.field
             value = filter.value
             comparator = filter.comparator
+            field_object = self.model._meta.fields_map[field]  # get field object
 
             # Helper: parse stringified JSON or CSV safely
             def parse_list(value):
@@ -481,7 +483,23 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
                 query = query.filter(**{f"{field}__isnull": is_null})
             elif comparator == 'ne':
                 query = query.filter(~Q(**{field: value}))
-            elif comparator in ['icontains', 'startswith', 'endswith', 'contains', 'gte', 'lte']:
+            elif comparator in ['icontains', 'startswith', 'endswith', 'contains', 'gte', 'lte', 'gt', 'lt']:
+                # Convert value for date/datetime fields if needed
+                if isinstance(field_object, fields.DateField):
+                    if comparator in ['gte', 'lte', 'gt', 'lt']:
+                        try:
+                            import datetime
+                            value = datetime.datetime.fromisoformat(value).date()
+                        except ValueError:
+                            raise ValueError(f"Invalid date format: {value}, expected YYYY-MM-DD")
+                elif isinstance(field_object, fields.DatetimeField):
+                    if comparator in ['gte', 'lte', 'gt', 'lt']:
+                        try:
+                            import datetime
+                            value = datetime.datetime.fromisoformat(value)
+                        except ValueError:
+                            raise ValueError(f"Invalid datetime format: {value}, expected YYYY-MM-DDTHH:MM:SS")
+
                 query = query.filter(**{f"{field}__{comparator}": value})
 
             elif comparator == 'bool':
