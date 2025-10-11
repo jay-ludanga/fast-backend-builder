@@ -449,7 +449,11 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             field = filter.field
             value = filter.value
             comparator = filter.comparator
-            field_object = self.model._meta.fields_map[field]  # get field object
+
+            field_parts = field.split("__")
+            # Check if the base field exists in the model
+            base_field = field_parts[0]
+            field_object = self.model._meta.fields_map[base_field]  # get field object
 
             # Helper: parse stringified JSON or CSV safely
             def parse_list(value):
