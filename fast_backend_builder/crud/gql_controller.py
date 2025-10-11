@@ -13,7 +13,7 @@ from tortoise.fields.relational import ForeignKeyFieldInstance, ManyToManyFieldI
 from tortoise.expressions import F as FExpression
 from tortoise.functions import Function, Count, Sum, Avg, Min, Max, Concat
 import re
-
+import pytz
 from fastapi.encoders import jsonable_encoder
 
 from fast_backend_builder.auth.auth import Auth
@@ -30,7 +30,7 @@ from tortoise.expressions import Q
 CreateSchema = TypeVar("CreateSchema")
 UpdateSchema = TypeVar("UpdateSchema")
 ResponseSchema = TypeVar("ResponseSchema")
-
+TZ = pytz.timezone("Africa/Dar_es_Salaam")  # or datetime.timezone.utc
 
 class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[ModelType],
                   Generic[ModelType, CreateSchema, UpdateSchema]):
@@ -497,6 +497,8 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
                         try:
                             import datetime
                             value = datetime.datetime.fromisoformat(value)
+                            if value.tzinfo is None:  # make it timezone aware
+                                value = TZ.localize(value)
                         except ValueError:
                             raise ValueError(f"Invalid datetime format: {value}, expected YYYY-MM-DDTHH:MM:SS")
 
