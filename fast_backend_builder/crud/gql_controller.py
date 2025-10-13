@@ -759,5 +759,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
         if "check constraint" in error_message:
             return f"The provided data does not meet validation requirements."
 
+        log_exception(e)
+
         # default / unknown constraint
         return "An unexpected database error occurred."
