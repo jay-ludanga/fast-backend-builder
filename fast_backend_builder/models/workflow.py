@@ -182,6 +182,7 @@ class Transition(TimeStampedModel):
     require_remark = fields.BooleanField(default=False)
     condition_description = fields.TextField(null=True)
     direction = fields.CharField(default='FORWARD', max_length=100)
+    action_text = fields.CharField(max_length=100, null=True)
 
     created_by = fields.ForeignKeyField(
         'models.User',
