@@ -17,6 +17,8 @@ class Attachment(TimeStampedModel):
 
     class Meta:
         table = "attachments"  # Specify the table name if needed
+        verbose_name = "Attachment"
+        verbose_name_plural = "Attachments"
 
     def __str__(self):
         return f"Attachment {self.id} - {self.file_path}"
