@@ -62,7 +62,8 @@ class AttachmentBaseController(Generic[ModelType]):
                     file_path=file_name,
                     mem_type=attachment.file.content_type,
                     attachment_type=self.model.__name__,
-                    attachment_type_id=attachment_type_id
+                    attachment_type_id=attachment_type_id,
+                    attachment_type_category=attachment.attachment_type_category
                 )
             except Exception as db_error:
                 log_exception(Exception(db_error))
