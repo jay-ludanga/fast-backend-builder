@@ -59,7 +59,7 @@ class AttachmentBaseController(Generic[ModelType]):
                 attachment = await Attachment.create(
                     title=attachment.title,
                     description=attachment.description,
-                    file_path=file_name,
+                    file_path=f"{self.model.__name__}/{file_name}",
                     mem_type=attachment.file.content_type,
                     attachment_type=self.model.__name__,
                     attachment_type_id=attachment_type_id,
@@ -102,7 +102,7 @@ class AttachmentBaseController(Generic[ModelType]):
         try:
             attachment = await Attachment.get(id=attachment_id)
             # Retrieve the file from MinIO
-            result = MinioService.get_instance().delete_file(f"{self.model.__name__}/{attachment.file_path}")
+            result = MinioService.get_instance().delete_file(f"{attachment.file_path}")
 
             await attachment.delete()
             # Return success response with file content
@@ -153,7 +153,7 @@ class AttachmentBaseController(Generic[ModelType]):
     async def download_attachment(self, file_path: str) -> ApiResponse:
         try:
             # Call the async download_file method to get the base64 content
-            base64_content = await MinioService.get_instance().download_file(f"{self.model.__name__}/{file_path}")
+            base64_content = await MinioService.get_instance().download_file(f"{file_path}")
 
             if base64_content is False:
                 return ApiResponse(
@@ -189,9 +189,8 @@ class AttachmentBaseController(Generic[ModelType]):
         :return: ApiResponse containing the signed URL or error.
         """
         try:
-            full_path = f"{self.model.__name__}/{file_path}" if hasattr(self, 'model') else file_path
 
-            signed_url = await MinioService.get_instance().get_signed_url(full_path, expiry_seconds=expiry_seconds)
+            signed_url = await MinioService.get_instance().get_signed_url(file_path, expiry_seconds=expiry_seconds)
 
             if not signed_url:
                 return ApiResponse(
