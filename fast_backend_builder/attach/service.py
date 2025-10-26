@@ -156,6 +156,47 @@ class MinioService:
             log_exception(e)
             return None
 
+
+    async def get_file_info_with_signed_url(self, file_name: str, expiry_seconds: int = 3600):
+        """
+        Retrieve file metadata and a signed download URL from MinIO.
+
+        :param file_name: The name of the file in the bucket.
+        :param expiry_seconds: Expiry time (default: 1 hour).
+        :return: dict with signed URL, file size, and metadata, or None if error.
+        """
+        self._ensure_initialized()
+
+        try:
+            # Get file metadata
+            stat = await asyncio.to_thread(
+                self.minio_client.stat_object,
+                self.bucket_name,
+                file_name
+            )
+
+            # Generate signed URL
+            signed_url = await asyncio.to_thread(
+                self.minio_client.presigned_get_object,
+                self.bucket_name,
+                file_name,
+                expires=timedelta(seconds=expiry_seconds)
+            )
+
+            return {
+                "file_name": file_name,
+                "file_size": stat.size,  # bytes
+                "last_modified": stat.last_modified.isoformat(),
+                "content_type": stat.content_type,
+                "etag": stat.etag,
+                "signed_url": signed_url,
+                "expires_in": expiry_seconds,
+            }
+
+        except S3Error as e:
+            log_exception(e)
+            return None
+
     async def rename_folder(self, old_folder: str, new_folder: str):
         """
         Rename/move all objects under old_folder to new_folder.

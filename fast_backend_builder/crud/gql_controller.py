@@ -5,16 +5,15 @@ from enum import Enum
 from typing import Generic, Tuple, Type, TypeVar, Optional, Dict, Any, Callable, List, Awaitable
 from uuid import UUID
 
+from tortoise import fields
 from tortoise.exceptions import DoesNotExist, FieldError, IntegrityError, ValidationError
 from tortoise.queryset import QuerySet, Q
 from tortoise.fields.relational import ForeignKeyFieldInstance, ManyToManyFieldInstance
 
-
 from tortoise.expressions import F as FExpression
 from tortoise.functions import Function, Count, Sum, Avg, Min, Max, Concat
 import re
-
-
+import pytz
 from fastapi.encoders import jsonable_encoder
 
 from fast_backend_builder.auth.auth import Auth
@@ -31,7 +30,7 @@ from tortoise.expressions import Q
 CreateSchema = TypeVar("CreateSchema")
 UpdateSchema = TypeVar("UpdateSchema")
 ResponseSchema = TypeVar("ResponseSchema")
-
+TZ = pytz.timezone("Africa/Dar_es_Salaam")  # or datetime.timezone.utc
 
 class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[ModelType],
                   Generic[ModelType, CreateSchema, UpdateSchema]):
@@ -368,7 +367,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             query = self.apply_filters(query, pagination_params)  # No await
             query = self.apply_sorting(query, pagination_params)  # No await
             query = self.apply_grouping(query, pagination_params)  # No await
-            
+
             data, count = await self.paginate_data(query, pagination_params)  # Execute query here
             return await self.get_final_queryset(data, count, fields)
         except FieldError as e:
@@ -451,6 +450,34 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             value = filter.value
             comparator = filter.comparator
 
+            field_parts = field.split("__")
+            # Check if the base field exists in the model
+            base_field = field_parts[0]
+            field_object = self.model._meta.fields_map[base_field]  # get field object
+
+            # Helper: parse stringified JSON or CSV safely
+            def parse_list(value):
+                if isinstance(value, str):
+                    val = value.strip()
+                    # remove extra surrounding quotes
+                    if val.startswith('"') and val.endswith('"'):
+                        val = val[1:-1]
+                    # unescape inner quotes
+                    val = val.replace('\\"', '"')
+                    # parse JSON array
+                    try:
+                        parsed = json.loads(val)
+                        if not isinstance(parsed, (list, tuple)):
+                            raise ValueError()
+                        return parsed
+                    except Exception:
+                        # fallback to comma-separated
+                        return [v.strip() for v in val.split(',') if v.strip()]
+                elif isinstance(value, (list, tuple)):
+                    return value
+                else:
+                    raise ValueError('"in"/"nin" comparator expects a list or string')
+
             if comparator == 'exclude':
                 query = query.exclude(**{field: value})
             elif comparator == 'exact':
@@ -460,7 +487,25 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
                 query = query.filter(**{f"{field}__isnull": is_null})
             elif comparator == 'ne':
                 query = query.filter(~Q(**{field: value}))
-            elif comparator in ['icontains', 'startswith', 'endswith', 'contains', 'gte', 'lte']:
+            elif comparator in ['icontains', 'startswith', 'endswith', 'contains', 'gte', 'lte', 'gt', 'lt']:
+                # Convert value for date/datetime fields if needed
+                if isinstance(field_object, fields.DateField):
+                    if comparator in ['gte', 'lte', 'gt', 'lt']:
+                        try:
+                            import datetime
+                            value = datetime.datetime.fromisoformat(value).date()
+                        except ValueError:
+                            raise ValueError(f"Invalid date format: {value}, expected YYYY-MM-DD")
+                elif isinstance(field_object, fields.DatetimeField):
+                    if comparator in ['gte', 'lte', 'gt', 'lt']:
+                        try:
+                            import datetime
+                            value = datetime.datetime.fromisoformat(value)
+                            if value.tzinfo is None:  # make it timezone aware
+                                value = TZ.localize(value)
+                        except ValueError:
+                            raise ValueError(f"Invalid datetime format: {value}, expected YYYY-MM-DDTHH:MM:SS")
+
                 query = query.filter(**{f"{field}__{comparator}": value})
 
             elif comparator == 'bool':
@@ -477,6 +522,14 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
                 except ValueError:
                     raise ValueError(f"Invalid date format: {value}, expected YYYY-MM-DD")
                 query = query.filter(**{field: date_value})
+
+
+            elif comparator in ['in', 'nin']:
+                parsed_values = parse_list(value)
+                if comparator == 'in':
+                    query = query.filter(**{f"{field}__in": parsed_values})
+                else:  # 'nin'
+                    query = query.exclude(**{f"{field}__in": parsed_values})
             else:
                 # Optional: log or raise an error for unsupported comparators
                 raise ValueError(f"Unsupported filter comparator: {comparator}")
@@ -520,7 +573,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
         """Applies grouping and aggregation to the query, including CONCAT and GROUP_CONCAT."""
         groups = pagination_params.groupBy
         group_functions = pagination_params.groupFunctions
-        
+
         if groups:
             for group in groups:
                 field = group.field
@@ -598,6 +651,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             grouped_field=FExpression(f"FLOOR({field} / {range_step}) * {range_step}")
         )
         return query.group_by("grouped_field")
+
     def get_function(self, name: str) -> Function:
         """Retrieve the appropriate function based on the name."""
         function_map = {
@@ -650,7 +704,7 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             obj_dict = obj.__dict__
             # Preprocess obj_dict to convert datetime objects to strings
             for key, value in obj_dict.items():
-                if isinstance(value, (datetime,date)):
+                if isinstance(value, (datetime, date)):
                     obj_dict[key] = value.isoformat()  # Convert to ISO 8601 string
                 elif isinstance(value, UUID):  # Handle UUID
                     obj_dict[key] = str(value)  # Convert to string
@@ -704,6 +758,8 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
 
         if "check constraint" in error_message:
             return f"The provided data does not meet validation requirements."
+
+        log_exception(e)
 
         # default / unknown constraint
         return "An unexpected database error occurred."

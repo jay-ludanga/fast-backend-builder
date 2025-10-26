@@ -174,7 +174,7 @@ class AttachmentQuery:
                 Filter(
                     field=f.split(',')[0].strip(),
                     comparator=f.split(',')[1].strip(),
-                    value=f.split(',')[2].strip()
+                    value=f.split(',', 2)[2].strip()
                 ) for f in filters
             ] if filters else None
         )
