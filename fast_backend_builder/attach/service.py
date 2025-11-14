@@ -26,6 +26,8 @@ class MinioService:
         if not hasattr(self, 'initialized'):
             self.minio_client = None
             self.bucket_name = None
+            self.public_domain = None
+            self.internal_endpoint = None
             self.initialized = False
 
     @classmethod
@@ -35,7 +37,8 @@ class MinioService:
             raise Exception("MinIO service is not initialized.")
         return cls._instance
 
-    async def init(self, server: str, access_key: str, secret_key: str, bucket_name: str, secure: bool = True):
+    async def init(self, server: str, access_key: str, secret_key: str, bucket_name: str, public_domain: str = None,
+                   secure: bool = True):
         """Initialize the MinIO service asynchronously with the given configuration."""
         try:
             if not self.initialized:
@@ -46,6 +49,8 @@ class MinioService:
                     secure=secure
                 )
                 self.bucket_name = bucket_name
+                self.public_domain = public_domain
+                self.internal_endpoint = server
 
                 # Ensure bucket exists or create it
                 if not self.minio_client.bucket_exists(bucket_name):
@@ -150,12 +155,18 @@ class MinioService:
                 file_name,
                 expires=timedelta(seconds=expiry_seconds)
             )
+            # Replace internal IP with real domain
+            if self.public_domain:
+                # example: http://10.0.0.5:9000 → https://files.domain.com
+                parsed = url.split("/", 3)
+                if len(parsed) >= 4:
+                    url = f"https://{self.public_domain}/{parsed[3]}"
+
             print(f"Generated signed URL for '{file_name}': {url}")
             return url
         except S3Error as e:
             log_exception(e)
             return None
-
 
     async def get_file_info_with_signed_url(self, file_name: str, expiry_seconds: int = 3600):
         """
@@ -182,6 +193,13 @@ class MinioService:
                 file_name,
                 expires=timedelta(seconds=expiry_seconds)
             )
+
+            # Replace internal IP with real domain
+            if self.public_domain:
+                # example: http://10.0.0.5:9000 → https://files.domain.com
+                parsed = signed_url.split("/", 3)
+                if len(parsed) >= 4:
+                    signed_url = f"https://{self.public_domain}/{parsed[3]}"
 
             return {
                 "file_name": file_name,

@@ -131,6 +131,10 @@ graphql gen:crud-api <module-name> --model Model1,Model2,Model3
 # generating graphql schemas with attachments
 
 graphql gen:crud-api <module-name> --model ModelName --with-attachment
+
+# generating graphql schemas with transitions
+
+graphql gen:crud-api <module-name> --model ModelName --with-transition
 ```
 
 📦 5. Initialize Aerich (DB migrations)
