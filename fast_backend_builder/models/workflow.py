@@ -7,11 +7,11 @@ from tortoise.functions import Max  # Import Max function
 from fast_backend_builder.models import TimeStampedModel
 from fast_backend_builder.notifications.service import NotificationService
 from fast_backend_builder.utils.enums import NotificationChannel
+from fast_backend_builder.utils.str_helpers import normalize_model_name
 from fast_backend_builder.workflow.exceptions import NoCurrentStepError, MissingStepError, PermissionDeniedError, \
     MissingRemarkError, WorkflowException
 
 '''List of Models'''
-
 
 
 class Workflow(TimeStampedModel):
@@ -250,19 +250,35 @@ class Evaluation(TimeStampedModel):
             return datetime.now() > due_date
         return False
 
+    # Helper to collect notifications for a list of users over multiple channels
+
+
     async def notify(self):
         notification_content = self.workflow_step.notification_content_type
         # Fetch the workflow object explicitly
         """Send notifications to applicant and evaluators based on workflow step flags."""
         message_template = {
-            "job_name": f"{self.object_name} Workflow Notification",
+            "job_name": f"{normalize_model_name(self.object_name)} Workflow Notification",
             "notification_channel": None,
             "recipient": None,
             "content_type": notification_content,
             "args": {
                 "client_name": None,
-                "actor_name": "ARMS Team"
+                "resource_name": None,
+                "step": None,
+                "actor_name": "ARMS Team",
             }
+        }
+
+        push_message = {
+            "job_name": f"{normalize_model_name(self.object_name)} Push Notification",
+            "user_id": None,
+            "message": None,
+            "args": {
+                "type": None,
+                "type_id": None,
+            }
+
         }
 
         notification = NotificationService.get_instance()
@@ -274,9 +290,17 @@ class Evaluation(TimeStampedModel):
         if isinstance(channels, str):
             channels = [channels]
 
+        push_message["args"]["type"] = self.object_name
+        push_message["args"]["type_id"] = self.object_id
+
         # Helper to send notifications to a list of users over multiple channels
-        async def send_to_users(users: list):
+        async def collect_messages_for_users(users: list, notify: str):
+            """Collects notification messages and push messages for users."""
+            notification_messages = []
+            push_messages = []
+
             for user in users:
+                # 1. Collect general notifications (Email/SMS)
                 for channel in channels:
                     # Skip SMS if phone number is missing
                     if channel == NotificationChannel.SMS and not user.phone_number:
@@ -285,6 +309,8 @@ class Evaluation(TimeStampedModel):
                     message_copy = message_template.copy()
                     message_copy["args"] = message_template["args"].copy()
                     message_copy["args"]["client_name"] = user.get_short_name()
+                    message_copy["args"]["resource_name"] = normalize_model_name(self.object_name)
+                    message_copy["args"]["step"] = workflow_step.code
 
                     if channel == NotificationChannel.EMAIL:
                         message_copy["recipient"] = user.email
@@ -292,9 +318,26 @@ class Evaluation(TimeStampedModel):
                         message_copy["recipient"] = user.phone_number
 
                     message_copy["notification_channel"] = channel
-                    await notification.put_message_on_queue('Notifications', message_copy)
+                    notification_messages.append(message_copy)  # Collect instead of putting on queue
+
+                # 2. Collect in-app/push notifications
+                current_push_message = push_message.copy()
+                current_push_message["user_id"] = str(user.id)
+                current_push_message['notification_channel'] = 'PUSH'
+
+                if notify == 'applicant':
+                    current_push_message['message'] = f"Your {normalize_model_name(self.object_name)} has been {workflow_step.code}"
+                else:
+                    current_push_message['message'] = (f"The new {normalize_model_name(self.object_name)} is ready for your evaluation. "
+                                                       f"Please check it out at your earliest convenience.")
+
+                push_messages.append(current_push_message)  # Collect instead of putting on queue
+
+            return notification_messages, push_messages
 
         # Notify applicant
+        applicant_notification_msgs = []
+        applicant_push_msgs = []
         if self.workflow_step.notify_applicant:
             first_evaluation = await Evaluation.filter(
                 object_id=self.object_id,
@@ -302,9 +345,13 @@ class Evaluation(TimeStampedModel):
             ).select_related('user').order_by('created_at').first()
 
             if first_evaluation:
-                await send_to_users([first_evaluation.user])
+                notif_msgs, push_msgs = await collect_messages_for_users([first_evaluation.user], 'applicant')
+                applicant_notification_msgs.extend(notif_msgs)
+                applicant_push_msgs.extend(push_msgs)
 
         # Notify evaluators
+        evaluator_notification_msgs = []
+        evaluator_push_msgs = []
         if self.workflow_step.notify_evaluator:
             next_transition = await Transition.filter(
                 from_step=self.workflow_step,
@@ -316,4 +363,16 @@ class Evaluation(TimeStampedModel):
                 for group in await next_transition.groups.all():
                     users.update(await group.users.all())
 
-                await send_to_users(list(users))
+                notif_msgs, push_msgs = await collect_messages_for_users(list(users), 'evaluator')
+                evaluator_notification_msgs.extend(notif_msgs)
+                evaluator_push_msgs.extend(push_msgs)
+
+        # 3. Send all collected messages in bulk
+        all_notification_messages = applicant_notification_msgs + evaluator_notification_msgs
+        all_push_messages = applicant_push_msgs + evaluator_push_msgs
+
+        if all_notification_messages:
+            await notification.put_bulk_messages_on_queue('Notifications', all_notification_messages)
+
+        if all_push_messages:
+            await notification.put_bulk_messages_on_queue('Notifications', all_push_messages)
