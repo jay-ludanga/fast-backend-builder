@@ -24,91 +24,83 @@ class AttachmentBaseController(Generic[ModelType]):
 
     async def upload_attachment(self, attachment_type_id, attachment: AttachmentUpload) -> ApiResponse:
         try:
-            # 1. Check if parent model exists
-            obj = await self.model.get(id=attachment_type_id)
+            # 1️⃣ Check if model exists
 
-            # 2. Get existing attachment (but DO NOT delete yet)
+            # 2️⃣ Check if attachment already exists
             existing: Optional[Attachment] = await Attachment.filter(
                 attachment_type=self.model.__name__,
                 attachment_type_id=attachment_type_id,
-                attachment_type_category=attachment.attachment_type_category,
+                attachment_type_category=attachment.attachment_type_category
             ).first()
 
-            # 3. Decode base64 file
+            # 3️⃣ Decode the base64 string into bytes, handle empty content
+            file_content = attachment.file.content
+            if not file_content:
+                return ApiResponse(
+                    status=False,
+                    code=ResponseCode.BAD_REQUEST,
+                    message="No file content provided.",
+                    data=None
+                )
+
             try:
-                decoded_file = base64.b64decode(attachment.file.content)
+                decoded_file = base64.b64decode(file_content)
             except Exception as decode_error:
                 return ApiResponse(
                     status=False,
                     code=ResponseCode.FAILURE,
                     message=f"Failed to decode base64 file: {decode_error}",
-                    data=None,
+                    data=None
                 )
 
-            # 4. Build MinIO path for the *new* file
-            random_suffix = os.urandom(4).hex()
-            file_name = f"{attachment.file.name}_{random_suffix}.{attachment.file.extension}"
-            new_object_path = f"{self.model.__name__}/{file_name}"
+            # 4️⃣ Determine the file name
+            if existing:
+                # Reuse the existing filename to overwrite in MinIO
+                file_name = existing.file_path.split('/')[-1]
+            else:
+                # Generate a new filename
+                file_name = f"{attachment.file.name}_{os.urandom(4).hex()}.{attachment.file.extension}"
 
-            # 5. Upload new file to MinIO
+            # 5️⃣ Upload to MinIO
             file_location, upload_error = await MinioService.get_instance().upload_file(
-                file_name=new_object_path,
+                file_name=f"{self.model.__name__}/{file_name}",
                 file_data=decoded_file,
-                content_type=attachment.file.content_type,
+                content_type=attachment.file.content_type
             )
 
             if not file_location:
-                # ❌ New upload failed – do NOT delete the old one
                 return ApiResponse(
                     status=False,
                     code=ResponseCode.FAILURE,
                     message=f"File upload failed: {upload_error}",
-                    data=None,
+                    data=None
                 )
 
-            # 6. Now that new upload succeeded, safely remove old file & record (if any)
+            # 6️⃣ Create or update database record
             if existing:
-                try:
-                    await MinioService.get_instance().delete_file(existing.file_path)
-                except Exception as e:
-                    # log, but don't break – new file is already uploaded
-                    log_exception(e)
-
-                await existing.delete()
-
-            # 7. Create new attachment record
-            try:
-                new_attachment = await Attachment.create(
+                existing.title = attachment.title
+                existing.description = attachment.description
+                existing.mem_type = attachment.file.content_type
+                existing.file_path = f"{self.model.__name__}/{file_name}"
+                await existing.save()
+                attachment_record = existing
+            else:
+                attachment_record = await Attachment.create(
                     title=attachment.title,
                     description=attachment.description,
-                    file_path=new_object_path,
+                    file_path=f"{self.model.__name__}/{file_name}",
                     mem_type=attachment.file.content_type,
                     attachment_type=self.model.__name__,
                     attachment_type_id=attachment_type_id,
-                    attachment_type_category=attachment.attachment_type_category,
-                )
-            except Exception as db_error:
-                log_exception(db_error)
-
-                # Optional: rollback the uploaded file from MinIO for consistency
-                try:
-                    await MinioService.get_instance().delete_file(new_object_path)
-                except Exception as e2:
-                    log_exception(e2)
-
-                return ApiResponse(
-                    status=False,
-                    code=ResponseCode.BAD_REQUEST,
-                    message=f"Database error: {db_error}",
-                    data=None,
+                    attachment_type_category=attachment.attachment_type_category
                 )
 
-            # 8. Success
+            # 7️⃣ Return success response
             return ApiResponse(
                 status=True,
                 code=ResponseCode.SUCCESS,
                 message="File uploaded and saved successfully!",
-                data=new_attachment,
+                data=attachment_record
             )
 
         except DoesNotExist:
@@ -116,16 +108,18 @@ class AttachmentBaseController(Generic[ModelType]):
                 status=False,
                 code=ResponseCode.NO_RECORD_FOUND,
                 message=f"{self.model.Meta.verbose_name} does not exist",
-                data=None,
+                data=None
             )
+
         except Exception as e:
-            log_exception(e)
+            log_exception(Exception(e))
             return ApiResponse(
                 status=False,
                 code=ResponseCode.FAILURE,
                 message="Unexpected error occurred, try again!",
-                data=None,
+                data=None
             )
+
     async def delete_attachment(self, attachment_id: str) -> ApiResponse:
         try:
             attachment = await Attachment.get(id=attachment_id)
