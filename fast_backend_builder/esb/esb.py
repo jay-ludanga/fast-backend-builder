@@ -159,10 +159,10 @@ class Esb:
         try:
             token = await self.get_esb_token()
             if not token: raise Exception("Failed to acquire ESB token")
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=False, timeout=self.timeout) as client:
                 response = await client.post(url=f"{self.engine_url}", json=self.build_esb_payload(payload, api_code),
                                              headers={"Authorization": f"Bearer {token}",
-                                                      "Content-Type": "application/json"}, timeout=self.timeout)
+                                                      "Content-Type": "application/json"})
             response.raise_for_status()
             json_resp = response.json()
             log_esb_calls(api_code=api_code, request=self.build_esb_payload(payload, api_code), response=json_resp)
