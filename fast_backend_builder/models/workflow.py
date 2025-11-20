@@ -116,7 +116,7 @@ class Workflow(TimeStampedModel):
                 using_db=connection
             )
 
-            await new_evaluation.notify()
+            # await new_evaluation.notify()
 
             return new_evaluation
         except WorkflowException as we:
