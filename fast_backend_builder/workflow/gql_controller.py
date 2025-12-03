@@ -49,13 +49,13 @@ class TransitionBaseController(Generic[ModelType]):
             user_id = current_user.get('user_id')
             username = current_user.get('username')
 
-            obj = await self.model.get(id=evaluation_status.object_id)
-
-            res = await self.before_transit(evaluation_status, obj)
-            if isinstance(res, ApiResponse):
-                return res  # already a structured response
-
             async with in_transaction("default")as connection:
+
+                obj = await self.model.get(id=evaluation_status.object_id, using_db=connection)
+
+                res = await self.before_transit(evaluation_status, obj)
+                if isinstance(res, ApiResponse):
+                    return res  # already a structured response
 
                 workflow: Workflow = await Workflow.filter(code=self.model.__name__, is_active=True).first()
 
