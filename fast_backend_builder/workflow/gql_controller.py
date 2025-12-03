@@ -69,7 +69,8 @@ class TransitionBaseController(Generic[ModelType]):
                         connection=connection
                     )
 
-                    obj.evaluation_status = evaluation.workflow_step.code
+                    # obj.evaluation_status = evaluation.workflow_step.code
+                    obj.evaluation_status = evaluation_status.status
                     await obj.save(using_db=connection)
                     await self.after_transit(obj, evaluation, connection)
 
