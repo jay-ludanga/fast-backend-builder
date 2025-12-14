@@ -20,24 +20,20 @@ class TransitionBaseController(Generic[ModelType]):
     def __init__(self, model: Type[ModelType]):
         self.model = model
 
-    async def after_transit(self, obj: Type[ModelType], evaluation: Evaluation, connection):
-        """
-        Function to be called after a transition is completed.
-        @param: connection: db transaction connection
-        """
+    async def before_transit(
+            self,
+            evaluation_status: EvaluationStatus,
+            obj: ModelType,
+            connection,
+    ):
         pass
 
-    async def before_transit(self, evaluation_status: EvaluationStatus, obj: ModelType):
-        """
-        Function to be called before a transition is performed
-        @param: evaluation_status: input transition status
-        @param: obj: Model object
-        Args:
-            evaluation_status:  EvaluationStatus
-            obj: Model object
-        Returns:
-
-        """
+    async def after_transit(
+            self,
+            obj: ModelType,
+            evaluation: Evaluation,
+            connection,
+    ):
         pass
 
     async def transit(self, evaluation_status: EvaluationStatus) -> ApiResponse:
@@ -49,52 +45,61 @@ class TransitionBaseController(Generic[ModelType]):
             user_id = current_user.get('user_id')
             username = current_user.get('username')
 
-            async with in_transaction("default")as connection:
+            async with in_transaction("default") as connection:
+                obj = await self.model.get(
+                    id=evaluation_status.object_id,
+                    using_db=connection,
+                )
 
-                obj = await self.model.get(id=evaluation_status.object_id, using_db=connection)
-
-                res = await self.before_transit(evaluation_status, obj)
+                res = await self.before_transit(
+                    evaluation_status,
+                    obj,
+                    connection,
+                )
                 if isinstance(res, ApiResponse):
-                    return res  # already a structured response
+                    return res
 
-                workflow: Workflow = await Workflow.filter(code=self.model.__name__, is_active=True).first()
+                workflow = await Workflow.filter(
+                    code=self.model.__name__,
+                    is_active=True,
+                ).using_db(connection).first()
 
-                if workflow:
-
-                    evaluation: Evaluation = await workflow.transit(
-                        object_id=evaluation_status.object_id,
-                        next_step=evaluation_status.status,
-                        remark=evaluation_status.remark,
-                        user_id=user_id,
-                        connection=connection
-                    )
-
-                    # obj.evaluation_status = evaluation.workflow_step.code
-                    # obj.evaluation_status = evaluation_status.status
-                    await self.model.filter(id=evaluation_status.object_id) \
-                        .using_db(connection) \
-                        .update(evaluation_status=evaluation.workflow_step.code)
-
-                    await self.after_transit(obj, evaluation, connection)
-
-                    await log_user_activity(user_id=user_id, username=username,
-                                            entity=Evaluation.Meta.verbose_name,
-                                            action='CHANGE',
-                                            details=f"{self.model.Meta.verbose_name} transitioned to {evaluation.workflow_step.name} successfully")
-
-                    return ApiResponse(
-                        status=True,
-                        code=ResponseCode.SUCCESS,
-                        message=f"{self.model.Meta.verbose_name} transitioned to {evaluation.workflow_step.name} successfully",
-                        data=True
-                    )
-                else:
+                if not workflow:
                     return ApiResponse(
                         status=False,
                         code=ResponseCode.BAD_REQUEST,
                         message=f"Workflow of {self.model.Meta.verbose_name} is not configured properly",
-                        data=False
+                        data=False,
                     )
+
+                evaluation = await workflow.transit(
+                    object_id=evaluation_status.object_id,
+                    next_step=evaluation_status.status,
+                    user_id=user_id,
+                    remark=evaluation_status.remark,
+                    connection=connection,
+                )
+
+                # Keep in-memory and DB state consistent
+                obj.evaluation_status = evaluation.workflow_step.code
+                await obj.save(using_db=connection)
+
+                await self.after_transit(obj, evaluation, connection)
+
+                await log_user_activity(
+                    user_id=user_id,
+                    username=username,
+                    entity=Evaluation.Meta.verbose_name,
+                    action='CHANGE',
+                    details=f"{self.model.Meta.verbose_name} transitioned to {evaluation.workflow_step.name} successfully",
+                )
+
+                return ApiResponse(
+                    status=True,
+                    code=ResponseCode.SUCCESS,
+                    message=f"{self.model.Meta.verbose_name} transitioned to {evaluation.workflow_step.name} successfully",
+                    data=True,
+                )
 
         except WorkflowException as ve:
             log_exception(Exception(ve))

@@ -35,36 +35,44 @@ class Workflow(TimeStampedModel):
         verbose_name = "Workflow"  # Human-readable name for admin, etc.
         verbose_name_plural = "Workflows"  # Plural version of the model name
 
-    async def get_initial_step(self):
-        # Get the WorkflowStep with the smallest order in this workflow
-        initial_step = await WorkflowStep.filter(workflow=self).order_by('order').first()
-        if initial_step.code != 'DRAFT':
+    async def get_initial_step(self, connection):
+        step = await WorkflowStep.filter(
+            workflow=self,
+        ).using_db(connection).order_by('order').first()
+
+        if not step or step.code != 'DRAFT':
             raise WorkflowException("First Workflow Step code must be DRAFT")
-        return initial_step
+
+        return step
 
     async def get_final_step(self):
         # Get the WorkflowStep with the largest order in this workflow
         final_step = await WorkflowStep.filter(workflow=self).order_by('-order').first()
         return final_step
 
-    async def can_transit(self, current_step: 'WorkflowStep', next_step_obj: 'WorkflowStep', user,
-                          remarks) -> bool:
-        # Get the transition that is allowed from this step to the next step
-        transition = await Transition.filter(from_step=current_step, to_step=next_step_obj).prefetch_related(
-            'groups').first()
+    async def can_transit(
+            self,
+            current_step,
+            next_step,
+            user,
+            remark,
+            connection,
+    ) -> bool:
+        transition = await Transition.filter(
+            from_step=current_step,
+            to_step=next_step,
+        ).using_db(connection).prefetch_related('groups').first()
 
         if not transition:
-            return False  # No transition found
+            return False
 
-        if transition.require_remark and not remarks:
+        if transition.require_remark and not remark:
             raise MissingRemarkError()
 
-        # Optimize group retrieval using a single query with set comparison for user groups
-        user_groups = await user.groups.all().values_list('id', flat=True)
-        allowed_groups = set(group.id for group in transition.groups)
+        user_group_ids = await user.groups.all().using_db(connection).values_list('id', flat=True)
+        allowed_group_ids = {g.id for g in transition.groups}
 
-        # Check if there's any overlap between the user's groups and allowed groups
-        return bool(set(user_groups) & allowed_groups) or user.is_superuser
+        return bool(set(user_group_ids) & allowed_group_ids) or user.is_superuser
 
     async def transit(self, object_id: str, next_step: str, user_id: str, connection, remark: str = None):
         """
@@ -75,50 +83,53 @@ class Workflow(TimeStampedModel):
         @param remark: Remark if Any
         """
         try:
-            # Get the current step from the last evaluation
-            last_evaluation = await Evaluation.filter(object_id=object_id, object_name=self.code).prefetch_related(
-                'workflow_step'  # Correct singular field
+            last_evaluation = await Evaluation.filter(
+                object_id=object_id,
+                object_name=self.code,
+            ).using_db(connection).prefetch_related(
+                'workflow_step'
             ).order_by('-created_at').first()
 
-            if not last_evaluation:
-                current_step = await self.get_initial_step()
-            else:
+            if last_evaluation:
                 current_step = last_evaluation.workflow_step
+            else:
+                current_step = await self.get_initial_step(connection)
 
-            # Get the next step using the provided code
-            next_step_obj = await WorkflowStep.get_or_none(code=next_step, workflow=self)
+            next_step_obj = await WorkflowStep.filter(
+                code=next_step,
+                workflow=self,
+            ).using_db(connection).first()
+
             if not next_step_obj:
-                raise MissingStepError(next_step_obj)
+                raise MissingStepError(next_step)
 
-            # Check if the user exists and optimize user import
             from fast_backend_builder.utils.config import get_user_model
             User = get_user_model()
-            user = await User.get_or_none(id=user_id)
-            if not user:
-                raise WorkflowException(f"User does not exist.")
 
-            # Check if the user is allowed to transition
-            if not await self.can_transit(current_step, next_step_obj, user, remark):
+            user = await User.filter(id=user_id).using_db(connection).first()
+            if not user:
+                raise WorkflowException("User does not exist")
+
+            if not await self.can_transit(
+                    current_step,
+                    next_step_obj,
+                    user,
+                    remark,
+                    connection,
+            ):
                 raise PermissionDeniedError(user, current_step, next_step_obj)
 
-            # Transition requires a remark, ensure it's present
-            transition = await Transition.filter(from_step=current_step, to_step=next_step_obj).first()
-            if transition and transition.require_remark and not remark:
-                raise MissingRemarkError()
-
-            # Create a new Evaluation recording the transition
-            new_evaluation = await Evaluation.create(
+            evaluation = await Evaluation.create(
                 object_name=self.code,
                 object_id=object_id,
                 workflow_step=next_step_obj,
                 remark=remark,
                 user=user,
-                using_db=connection
+                using_db=connection,
             )
 
-            # await new_evaluation.notify()
+            return evaluation
 
-            return new_evaluation
         except WorkflowException as we:
             raise WorkflowException(we)
         except Exception as e:
@@ -252,7 +263,6 @@ class Evaluation(TimeStampedModel):
 
     # Helper to collect notifications for a list of users over multiple channels
 
-
     async def notify(self):
         notification_content = self.workflow_step.notification_content_type
         # Fetch the workflow object explicitly
@@ -326,10 +336,12 @@ class Evaluation(TimeStampedModel):
                 current_push_message['notification_channel'] = 'PUSH'
 
                 if notify == 'applicant':
-                    current_push_message['message'] = f"Your {normalize_model_name(self.object_name)} has been {workflow_step.code}"
+                    current_push_message[
+                        'message'] = f"Your {normalize_model_name(self.object_name)} has been {workflow_step.code}"
                 else:
-                    current_push_message['message'] = (f"The new {normalize_model_name(self.object_name)} is ready for your evaluation. "
-                                                       f"Please check it out at your earliest convenience.")
+                    current_push_message['message'] = (
+                        f"The new {normalize_model_name(self.object_name)} is ready for your evaluation. "
+                        f"Please check it out at your earliest convenience.")
 
                 push_messages.append(current_push_message)  # Collect instead of putting on queue
 
