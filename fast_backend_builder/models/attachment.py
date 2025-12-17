@@ -13,6 +13,12 @@ class Attachment(TimeStampedModel):
     attachment_type = fields.CharField(max_length=45)
     attachment_type_id = fields.UUIDField(default=uuid.uuid4)
     attachment_type_category = fields.CharField(max_length=45, null=True) # category for particular type
+    created_by = fields.ForeignKeyField(
+        'models.User',
+        null=True,
+        on_delete=fields.SET_NULL,
+        related_name='attachments'
+    )
 
 
     class Meta:

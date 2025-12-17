@@ -441,100 +441,118 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             query = query.filter(search_filters)  # No await
         return query
 
-    def apply_filters(self, query: QuerySet[ModelType], pagination_params: PaginationParams) -> QuerySet[ModelType]:
+    def apply_filters(
+            self,
+            query: QuerySet[ModelType],
+            pagination_params: PaginationParams
+    ) -> QuerySet[ModelType]:
+
         if not pagination_params.filters:
             return query
 
+        and_q = Q()
+        or_q = Q()
+        or_count = 0
+
         for filter in pagination_params.filters:
-            field = filter.field
+            # -------------------------
+            # Detect logic
+            # -------------------------
+            raw_field = filter.field.strip()
+            logic = "and"
+
+            if raw_field.startswith("or:"):
+                logic = "or"
+                raw_field = raw_field[3:]
+
+            field = raw_field
             value = filter.value
             comparator = filter.comparator
 
-            field_parts = field.split("__")
-            # Check if the base field exists in the model
-            base_field = field_parts[0]
-            field_object = self.model._meta.fields_map[base_field]  # get field object
+            # -------------------------
+            # Validate field
+            # -------------------------
+            base_field = field.split("__")[0]
+            field_object = self.model._meta.fields_map.get(base_field)
+            if not field_object:
+                raise ValueError(f"Invalid filter field: {base_field}")
 
-            # Helper: parse stringified JSON or CSV safely
-            def parse_list(value):
-                if isinstance(value, str):
-                    val = value.strip()
-                    # remove extra surrounding quotes
-                    if val.startswith('"') and val.endswith('"'):
-                        val = val[1:-1]
-                    # unescape inner quotes
-                    val = val.replace('\\"', '"')
-                    # parse JSON array
+            # -------------------------
+            # Helpers
+            # -------------------------
+            def parse_list(val):
+                if isinstance(val, str):
+                    val = val.strip().strip('"').replace('\\"', '"')
                     try:
                         parsed = json.loads(val)
                         if not isinstance(parsed, (list, tuple)):
-                            raise ValueError()
+                            raise ValueError
                         return parsed
                     except Exception:
-                        # fallback to comma-separated
-                        return [v.strip() for v in val.split(',') if v.strip()]
-                elif isinstance(value, (list, tuple)):
-                    return value
-                else:
-                    raise ValueError('"in"/"nin" comparator expects a list or string')
+                        return [v.strip() for v in val.split(",") if v.strip()]
+                return val
 
-            if comparator == 'exclude':
-                query = query.exclude(**{field: value})
-            elif comparator == 'exact':
-                query = query.filter(**{field: value})
-            elif comparator == 'isnull':
-                is_null = str(value).lower() == 'true'
-                query = query.filter(**{f"{field}__isnull": is_null})
-            elif comparator == 'ne':
-                query = query.filter(~Q(**{field: value}))
-            elif comparator in ['icontains', 'startswith', 'endswith', 'contains', 'gte', 'lte', 'gt', 'lt']:
-                # Convert value for date/datetime fields if needed
-                if isinstance(field_object, fields.DateField):
-                    if comparator in ['gte', 'lte', 'gt', 'lt']:
-                        try:
-                            import datetime
-                            value = datetime.datetime.fromisoformat(value).date()
-                        except ValueError:
-                            raise ValueError(f"Invalid date format: {value}, expected YYYY-MM-DD")
-                elif isinstance(field_object, fields.DatetimeField):
-                    if comparator in ['gte', 'lte', 'gt', 'lt']:
-                        try:
-                            import datetime
-                            value = datetime.datetime.fromisoformat(value)
-                            if value.tzinfo is None:  # make it timezone aware
-                                value = TZ.localize(value)
-                        except ValueError:
-                            raise ValueError(f"Invalid datetime format: {value}, expected YYYY-MM-DDTHH:MM:SS")
+            # -------------------------
+            # Build Q
+            # -------------------------
+            q = None
 
-                query = query.filter(**{f"{field}__{comparator}": value})
+            if comparator == "exclude":
+                q = ~Q(**{field: value})
 
-            elif comparator == 'bool':
-                if str(value).lower() in ("true", "1", "yes"):
-                    query = query.filter(**{field: True})
-                elif str(value).lower() in ("false", "0", "no"):
-                    query = query.filter(**{field: False})
-                else:
-                    raise ValueError(f"Invalid boolean value: {value}")
-            elif comparator == 'date':
+            elif comparator == "exact":
+                q = Q(**{field: value})
+
+            elif comparator == "isnull":
+                q = Q(**{f"{field}__isnull": str(value).lower() == "true"})
+
+            elif comparator == "ne":
+                q = ~Q(**{field: value})
+
+            elif comparator in ["icontains", "startswith", "endswith", "contains",
+                                "gte", "lte", "gt", "lt"]:
+
+                if comparator in ["gte", "lte", "gt", "lt"]:
+                    import datetime
+                    if isinstance(field_object, fields.DateField):
+                        value = datetime.date.fromisoformat(value)
+                    elif isinstance(field_object, fields.DatetimeField):
+                        value = datetime.datetime.fromisoformat(value)
+
+                q = Q(**{f"{field}__{comparator}": value})
+
+            elif comparator == "bool":
+                q = Q(**{field: str(value).lower() in ("true", "1", "yes")})
+
+            elif comparator == "date":
                 from datetime import datetime
-                try:
-                    date_value = datetime.fromisoformat(value).date()
-                except ValueError:
-                    raise ValueError(f"Invalid date format: {value}, expected YYYY-MM-DD")
-                query = query.filter(**{field: date_value})
+                q = Q(**{field: datetime.fromisoformat(value).date()})
 
+            elif comparator in ["in", "nin"]:
+                parsed = parse_list(value)
+                q = Q(**{f"{field}__in": parsed})
+                if comparator == "nin":
+                    q = ~q
 
-            elif comparator in ['in', 'nin']:
-                parsed_values = parse_list(value)
-                if comparator == 'in':
-                    query = query.filter(**{f"{field}__in": parsed_values})
-                else:  # 'nin'
-                    query = query.exclude(**{f"{field}__in": parsed_values})
             else:
-                # Optional: log or raise an error for unsupported comparators
                 raise ValueError(f"Unsupported filter comparator: {comparator}")
 
-        return query
+            # -------------------------
+            # Combine logically
+            # -------------------------
+            if logic == "or":
+                or_q |= q
+                or_count += 1
+            else:
+                and_q &= q
+
+        # -------------------------
+        # Apply once
+        # -------------------------
+        if or_count:
+            return query.filter(and_q & or_q)
+
+        return query.filter(and_q)
 
     def apply_sorting(self, query: QuerySet[ModelType], pagination_params: PaginationParams) -> QuerySet[ModelType]:
         sort_by = pagination_params.sortBy

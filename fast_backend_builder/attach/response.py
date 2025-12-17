@@ -17,6 +17,7 @@ class AttachmentResponse:
     attachment_type: Optional[str] = None
     attachment_type_category: Optional[str] = None
     attachment_type_id: Optional[str] = None
+    created_by_id: Optional[str] = None
 
     @strawberry.field
     async def signed_url(self) -> Optional[str]:

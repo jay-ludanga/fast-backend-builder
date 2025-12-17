@@ -7,6 +7,7 @@ from tortoise.exceptions import DoesNotExist
 from decouple import config
 from fast_backend_builder.attach.request import AttachmentUpload
 from fast_backend_builder.attach.service import MinioService
+from fast_backend_builder.auth.auth import Auth
 from fast_backend_builder.models.attachment import Attachment
 from fast_backend_builder.utils.error_logging import log_exception
 from minio import Minio
@@ -24,16 +25,19 @@ class AttachmentBaseController(Generic[ModelType]):
 
     async def upload_attachment(self, attachment_type_id, attachment: AttachmentUpload) -> ApiResponse:
         try:
-            # 1️⃣ Check if model exists
 
-            # 2️⃣ Check if attachment already exists
+            current_user = Auth.user()
+            user_id = current_user.get('user_id')
+            # Check if model exists
+
+            # Check if attachment already exists
             existing: Optional[Attachment] = await Attachment.filter(
                 attachment_type=self.model.__name__,
                 attachment_type_id=attachment_type_id,
                 attachment_type_category=attachment.attachment_type_category
             ).first()
 
-            # 3️⃣ Decode the base64 string into bytes, handle empty content
+            # Decode the base64 string into bytes, handle empty content
             file_content = attachment.file.content
             if not file_content:
                 return ApiResponse(
@@ -53,7 +57,7 @@ class AttachmentBaseController(Generic[ModelType]):
                     data=None
                 )
 
-            # 4️⃣ Determine the file name
+            # Determine the file name
             if existing:
                 # Reuse the existing filename to overwrite in MinIO
                 file_name = existing.file_path.split('/')[-1]
@@ -61,7 +65,7 @@ class AttachmentBaseController(Generic[ModelType]):
                 # Generate a new filename
                 file_name = f"{attachment.file.name}_{os.urandom(4).hex()}.{attachment.file.extension}"
 
-            # 5️⃣ Upload to MinIO
+            # Upload to MinIO
             file_location, upload_error = await MinioService.get_instance().upload_file(
                 file_name=f"{self.model.__name__}/{file_name}",
                 file_data=decoded_file,
@@ -76,7 +80,7 @@ class AttachmentBaseController(Generic[ModelType]):
                     data=None
                 )
 
-            # 6️⃣ Create or update database record
+            # Create or update database record
             if existing:
                 existing.title = attachment.title
                 existing.description = attachment.description
@@ -92,10 +96,11 @@ class AttachmentBaseController(Generic[ModelType]):
                     mem_type=attachment.file.content_type,
                     attachment_type=self.model.__name__,
                     attachment_type_id=attachment_type_id,
-                    attachment_type_category=attachment.attachment_type_category
+                    attachment_type_category=attachment.attachment_type_category,
+                    created_by_id=user_id
                 )
 
-            # 7️⃣ Return success response
+            # Return success response
             return ApiResponse(
                 status=True,
                 code=ResponseCode.SUCCESS,
