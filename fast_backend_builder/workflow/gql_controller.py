@@ -37,27 +37,20 @@ class TransitionBaseController(Generic[ModelType]):
         pass
 
     async def transit(self, evaluation_status: EvaluationStatus) -> ApiResponse:
-        """
-        Creates new transition for ModelType.
-        """
-        try:
-            current_user = Auth.user()
-            user_id = current_user.get('user_id')
-            username = current_user.get('username')
+        current_user = Auth.user()
+        user_id = current_user.get("user_id")
+        username = current_user.get("username")
 
+        try:
             async with in_transaction("default") as connection:
                 obj = await self.model.get(
                     id=evaluation_status.object_id,
                     using_db=connection,
                 )
 
-                res = await self.before_transit(
-                    evaluation_status,
-                    obj,
-                    connection,
-                )
+                res = await self.before_transit(evaluation_status, obj, connection)
                 if isinstance(res, ApiResponse):
-                    return res
+                    raise WorkflowException(res.message)
 
                 workflow = await Workflow.filter(
                     code=self.model.__name__,
@@ -65,11 +58,8 @@ class TransitionBaseController(Generic[ModelType]):
                 ).using_db(connection).first()
 
                 if not workflow:
-                    return ApiResponse(
-                        status=False,
-                        code=ResponseCode.BAD_REQUEST,
-                        message=f"Workflow of {self.model.Meta.verbose_name} is not configured properly",
-                        data=False,
+                    raise WorkflowException(
+                        f"Workflow of {self.model.Meta.verbose_name} is not configured properly"
                     )
 
                 evaluation, next_step_code = await workflow.transit(
@@ -80,76 +70,57 @@ class TransitionBaseController(Generic[ModelType]):
                     connection=connection,
                 )
 
-                # Keep in-memory and DB state consistent
                 obj.evaluation_status = next_step_code
                 await obj.save(using_db=connection)
 
+                # ⚠️ if this fails → FULL ROLLBACK
                 await self.after_transit(obj, evaluation, connection)
 
-                await log_user_activity(
-                    user_id=user_id,
-                    username=username,
-                    entity=Evaluation.Meta.verbose_name,
-                    action='CHANGE',
-                    details=f"{self.model.Meta.verbose_name} transitioned to {next_step_code} successfully",
-                )
+            # ✅ COMMIT ONLY HAPPENS HERE
 
-                return ApiResponse(
-                    status=True,
-                    code=ResponseCode.SUCCESS,
-                    message=f"{self.model.Meta.verbose_name} transitioned to {evaluation.workflow_step.name} successfully",
-                    data=True,
-                )
+            await log_user_activity(
+                user_id=user_id,
+                username=username,
+                entity=Evaluation.Meta.verbose_name,
+                action="CHANGE",
+                details=f"{self.model.Meta.verbose_name} transitioned to {next_step_code}",
+            )
 
-        except WorkflowException as ve:
-            log_exception(Exception(ve))
+            return ApiResponse(
+                status=True,
+                code=ResponseCode.SUCCESS,
+                message=f"{self.model.Meta.verbose_name} transitioned successfully",
+                data=True,
+            )
+
+
+        except WorkflowException as we:
+            log_exception(we)
             return ApiResponse(
                 status=False,
-                code=ResponseCode.BAD_REQUEST,
-                message=f"{str(ve)}",
-                data=False
+                code=ResponseCode.BAD_REQUEST,  # custom code for workflow errors
+                message=f"Workflow error: {str(we)}",
+                data=False,
             )
-        except DoesNotExist:
-            return ApiResponse(
-                status=False,
-                code=ResponseCode.NO_RECORD_FOUND,
-                message=f"The {self.model.Meta.verbose_name} does not exist",
-                data=False
-            )
+
+
         except ValueError as ve:
-            log_exception(Exception(ve))
+            log_exception(ve)
             return ApiResponse(
                 status=False,
-                code=ResponseCode.BAD_REQUEST,
-                message=str(ve),
-                data=False
+                code=ResponseCode.BAD_REQUEST,  # different custom code if you want
+                message=f"Value error: {str(ve)}",
+                data=False,
             )
-        except IntegrityError as e:
-            log_exception(Exception(e))
-            # Check the exception message to identify a unique constraint violation
 
-            return ApiResponse(
-                status=False,
-                code=ResponseCode.BAD_REQUEST,
-                message=self.parse_integrity_error(e),
-                data=False
-            )
-        except ValidationError as e:
-            log_exception(e)
-            # Check the exception message to identify a unique constraint violation
-            return ApiResponse(
-                status=False,
-                code=ResponseCode.BAD_REQUEST,
-                message=str(e),
-                data=False
-            )
+
         except Exception as e:
             log_exception(e)
             return ApiResponse(
                 status=False,
-                code=ResponseCode.FAILURE,
-                message=f"Failed to transit {self.model.Meta.verbose_name}. Try again.",
-                data=None
+                code=ResponseCode.FAILURE,  # generic failure for anything else
+                message=f"Unexpected error while transitioning {self.model.Meta.verbose_name}",
+                data=False,
             )
 
     async def get_transitions(self, model_id: str) -> ApiResponse:
