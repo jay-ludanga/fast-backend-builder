@@ -128,7 +128,7 @@ class Workflow(TimeStampedModel):
                 using_db=connection,
             )
 
-            return evaluation
+            return evaluation, next_step_obj.code
 
         except WorkflowException as we:
             raise WorkflowException(we)

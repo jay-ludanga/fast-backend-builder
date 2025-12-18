@@ -72,7 +72,7 @@ class TransitionBaseController(Generic[ModelType]):
                         data=False,
                     )
 
-                evaluation = await workflow.transit(
+                evaluation, next_step_code = await workflow.transit(
                     object_id=evaluation_status.object_id,
                     next_step=evaluation_status.status,
                     user_id=user_id,
@@ -81,7 +81,7 @@ class TransitionBaseController(Generic[ModelType]):
                 )
 
                 # Keep in-memory and DB state consistent
-                obj.evaluation_status = evaluation.workflow_step.code
+                obj.evaluation_status = next_step_code
                 await obj.save(using_db=connection)
 
                 await self.after_transit(obj, evaluation, connection)
@@ -91,7 +91,7 @@ class TransitionBaseController(Generic[ModelType]):
                     username=username,
                     entity=Evaluation.Meta.verbose_name,
                     action='CHANGE',
-                    details=f"{self.model.Meta.verbose_name} transitioned to {evaluation.workflow_step.name} successfully",
+                    details=f"{self.model.Meta.verbose_name} transitioned to {next_step_code} successfully",
                 )
 
                 return ApiResponse(
