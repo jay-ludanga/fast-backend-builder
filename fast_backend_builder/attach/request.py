@@ -14,4 +14,5 @@ class AttachmentUpload:
     description: Optional[str] = None
     attachment_type_category: Optional[str] = None
     file: AttachmentFile
+    created_by_id: Optional[str] = None
     

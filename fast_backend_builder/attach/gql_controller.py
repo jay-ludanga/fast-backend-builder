@@ -26,8 +26,11 @@ class AttachmentBaseController(Generic[ModelType]):
     async def upload_attachment(self, attachment_type_id, attachment: AttachmentUpload) -> ApiResponse:
         try:
 
-            current_user = Auth.user()
-            user_id = current_user.get('user_id')
+            if not attachment.created_by_id:
+                current_user = Auth.user()
+                user_id = current_user.get('user_id')
+            else:
+                user_id = attachment.created_by_id
             # Check if model exists
 
             # Check if attachment already exists
