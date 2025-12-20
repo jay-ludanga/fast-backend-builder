@@ -9,7 +9,7 @@ class Attachment(TimeStampedModel):
     title = fields.CharField(max_length=100, null=True)
     description = fields.CharField(max_length=1000, null=True)
     file_path = fields.CharField(max_length=200)
-    mem_type = fields.CharField(max_length=45, null=True)
+    mem_type = fields.CharField(max_length=200, null=True)
     attachment_type = fields.CharField(max_length=45)
     attachment_type_id = fields.UUIDField(default=uuid.uuid4)
     attachment_type_category = fields.CharField(max_length=45, null=True) # category for particular type
