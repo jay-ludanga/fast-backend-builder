@@ -107,7 +107,7 @@ class AttachmentBaseController(Generic[ModelType]):
             return ApiResponse(
                 status=True,
                 code=ResponseCode.SUCCESS,
-                message="File uploaded and saved successfully!",
+                message=f"File uploaded and saved successfully, Error: {upload_error}: Location: {file_location}",
                 data=attachment_record
             )
 
