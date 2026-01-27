@@ -1,5 +1,6 @@
 import argparse
 from fast_backend_builder.crud.api_gen import generate_schema as gen_crud_schema
+from fast_backend_builder.utils.enums import APIType
 
 def add_arguments(parser: argparse.ArgumentParser):    
     subparsers = parser.add_subparsers(dest='command', description='Graphql API generator')
@@ -69,7 +70,12 @@ def main():
         create_multiple = args.create_multiple if args.create_multiple else False
         with_transition = args.with_transition if args.with_transition else False
 
-        gen_crud_schema(args.module, args.module_package, models, with_controller, create_multiple, with_attachment, with_transition)
+        gen_crud_schema(
+            args.module, args.module_package, models, 
+            with_controller, create_multiple, 
+            with_attachment, with_transition, 
+            APIType.REST
+        )
 
 
 if __name__ == "__main__":

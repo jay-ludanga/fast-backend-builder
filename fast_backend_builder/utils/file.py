@@ -15,10 +15,11 @@ def get_file_content(filename: str):
 # Reads a file from a package
 def get_package_file(package: str, filename: str):
     try:
+        print(f"Reading File '{package}/{filename}'")
         with importlib.resources.open_text(package, filename) as file:
             content = file.read()
     except FileNotFoundError:
-        print(f"Template file '{filename}' File not found.")
+        print(f"Template file '{package}/{filename}' File not found.")
         return False
     return content
 

@@ -1,7 +1,8 @@
 from functools import wraps
 from typing import Optional, Callable, Any
 
-from fastapi import Request, HTTPException
+from fastapi import Request, HTTPException, Depends
+from fastapi.security import OAuth2PasswordBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from fast_backend_builder.utils.config import get_user_model
@@ -93,3 +94,11 @@ def authorize(required_permissions: Optional[list] = None):
         return async_wrapper
 
     return decorator
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/token")
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+    current_user = Auth.user()
+    if current_user is None or current_user == {}:
+        raise HTTPException(status_code=403, detail="User not authenticated")
+    return current_user

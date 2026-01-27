@@ -15,3 +15,8 @@ class NotificationChannel(str, Enum):
     EMAIL = "Email",
     SMS = "SMS",
     PUSH = "PUSH"
+    
+
+class APIType(str, Enum):
+    REST = "REST-API",
+    GRAPHQL = "GRAPHQL-API"

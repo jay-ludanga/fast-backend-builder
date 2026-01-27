@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Generic, Tuple, Type, TypeVar, Optional, Dict, Any, Callable, List, Awaitable
 from uuid import UUID
 
+from fast_backend_builder.utils.enums import APIType
 from tortoise import fields
 from tortoise.exceptions import DoesNotExist, FieldError, IntegrityError, ValidationError
 from tortoise.queryset import QuerySet, Q
@@ -38,10 +39,12 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
     Base class for all CRUD operations using Tortoise ORM.
     """
 
-    def __init__(self, model: Type[ModelType], response_schema: Optional[Type[ResponseSchema]] = None):
+    api_type: APIType
+
+    def __init__(self, model: Type[ModelType], response_schema: Optional[Type[ResponseSchema]] = None, api_type: APIType = APIType.GRAPHQL):
         self.model = model
         self.response_schema = response_schema
-
+        self.api_type = api_type
         super().__init__(model)
 
     async def create(self, obj_in: CreateSchema,

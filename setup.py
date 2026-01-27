@@ -28,6 +28,7 @@ setup(
     entry_points={
         'console_scripts': [
             'graphql=fast_backend_builder.commands.graphql:main',  # maps 'graphql-gen' to 'generate_schema.py'
+            'rest=fast_backend_builder.commands.rest:main',  # maps 'graphql-gen' to 'generate_schema.py'
             'reportviews=fast_backend_builder.commands.report_views:main',  # maps 'graphql-gen' to 'generate_schema.py'
         ],
     },
