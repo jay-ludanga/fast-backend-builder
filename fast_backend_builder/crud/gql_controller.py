@@ -38,9 +38,12 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
     Base class for all CRUD operations using Tortoise ORM.
     """
 
-    def __init__(self, model: Type[ModelType], response_schema: Optional[Type[ResponseSchema]] = None):
+    def __init__(self, model: Type[ModelType], response_schema: Optional[Type[ResponseSchema]] = None,
+                 *,
+                 context: Optional[Dict[str, Any]] = None):
         self.model = model
         self.response_schema = response_schema
+        self.context: Dict[str, Any] = context or {}
 
         super().__init__(model)
 
