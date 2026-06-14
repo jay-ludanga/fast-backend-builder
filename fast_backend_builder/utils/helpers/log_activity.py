@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fast_backend_builder.notifications.service import NotificationService
+from fast_backend_builder.utils.env import env_var
 from fast_backend_builder.utils.error_logging import log_exception
 
 
@@ -14,7 +15,9 @@ async def log_user_activity(user_id, username: str, entity: str, action: str, de
     @param details: log details
     """
     try:
+        service_name = env_var('SERVICE_NAME', default='unknown-service')
         await NotificationService.get_instance().put_message_on_queue('AuditLogs', {
+            'service_name': service_name,
             'user_id': str(user_id),
             'username': username,
             'entity': entity,
