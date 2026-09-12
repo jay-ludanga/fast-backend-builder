@@ -477,22 +477,39 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
             # -------------------------
             base_field = field.split("__")[0]
             field_object = self.model._meta.fields_map.get(base_field)
+
             if not field_object:
-                raise ValueError(f"Invalid filter field: {base_field}")
+                raise ValueError(
+                    f"Invalid filter field: {base_field}"
+                )
 
             # -------------------------
             # Helpers
             # -------------------------
             def parse_list(val):
                 if isinstance(val, str):
-                    val = val.strip().strip('"').replace('\\"', '"')
+                    val = (
+                        val
+                        .strip()
+                        .strip('"')
+                        .replace('\\"', '"')
+                    )
+
                     try:
                         parsed = json.loads(val)
+
                         if not isinstance(parsed, (list, tuple)):
                             raise ValueError
+
                         return parsed
+
                     except Exception:
-                        return [v.strip() for v in val.split(",") if v.strip()]
+                        return [
+                            v.strip()
+                            for v in val.split(",")
+                            if v.strip()
+                        ]
+
                 return val
 
             # -------------------------
@@ -507,38 +524,76 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
                 q = Q(**{field: value})
 
             elif comparator == "isnull":
-                q = Q(**{f"{field}__isnull": str(value).lower() == "true"})
+                q = Q(
+                    **{
+                        f"{field}__isnull":
+                            str(value).lower() == "true"
+                    }
+                )
 
             elif comparator == "ne":
                 q = ~Q(**{field: value})
 
-            elif comparator in ["icontains", "startswith", "endswith", "contains",
-                                "gte", "lte", "gt", "lt"]:
-
+            elif comparator in [
+                "icontains",
+                "startswith",
+                "endswith",
+                "contains",
+                "gte",
+                "lte",
+                "gt",
+                "lt",
+            ]:
                 if comparator in ["gte", "lte", "gt", "lt"]:
                     import datetime
+
                     if isinstance(field_object, fields.DateField):
                         value = datetime.date.fromisoformat(value)
+
                     elif isinstance(field_object, fields.DatetimeField):
                         value = datetime.datetime.fromisoformat(value)
 
-                q = Q(**{f"{field}__{comparator}": value})
+                q = Q(
+                    **{
+                        f"{field}__{comparator}": value
+                    }
+                )
 
             elif comparator == "bool":
-                q = Q(**{field: str(value).lower() in ("true", "1", "yes")})
+                q = Q(
+                    **{
+                        field:
+                            str(value).lower()
+                            in ("true", "1", "yes")
+                    }
+                )
 
             elif comparator == "date":
                 from datetime import datetime
-                q = Q(**{field: datetime.fromisoformat(value).date()})
+
+                q = Q(
+                    **{
+                        field:
+                            datetime.fromisoformat(value).date()
+                    }
+                )
 
             elif comparator in ["in", "nin"]:
                 parsed = parse_list(value)
-                q = Q(**{f"{field}__in": parsed})
+
+                q = Q(
+                    **{
+                        f"{field}__in": parsed
+                    }
+                )
+
                 if comparator == "nin":
                     q = ~q
 
             else:
-                raise ValueError(f"Unsupported filter comparator: {comparator}")
+                raise ValueError(
+                    f"Unsupported filter comparator: {comparator}"
+                )
 
             # -------------------------
             # Combine logically
@@ -552,10 +607,20 @@ class GQLBaseCRUD(AttachmentBaseController[ModelType], TransitionBaseController[
         # -------------------------
         # Apply once
         # -------------------------
-        if or_count:
-            return query.filter(and_q & or_q)
+        result = query.filter(
+            and_q & or_q
+            if or_count
+            else and_q
+        )
 
-        return query.filter(and_q)
+        # -------------------------
+        # Remove duplicates caused
+        # by JOINs
+        # -------------------------
+        if any("__" in f.field for f in pagination_params.filters):
+            result = result.distinct()
+
+        return result
 
     def apply_sorting(self, query: QuerySet[ModelType], pagination_params: PaginationParams) -> QuerySet[ModelType]:
         sort_by = pagination_params.sortBy
