@@ -69,6 +69,9 @@ class Workflow(TimeStampedModel):
         if transition.require_remark and not remark:
             raise MissingRemarkError()
 
+        if current_step.code == next_step.code:
+            return True
+
         user_group_ids = await user.groups.all().using_db(connection).values_list('id', flat=True)
         allowed_group_ids = {g.id for g in transition.groups}
 
