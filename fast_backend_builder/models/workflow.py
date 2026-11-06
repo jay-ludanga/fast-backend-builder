@@ -58,6 +58,10 @@ class Workflow(TimeStampedModel):
             remark,
             connection,
     ) -> bool:
+
+        if current_step.code == next_step.code:
+            return True
+
         transition = await Transition.filter(
             from_step=current_step,
             to_step=next_step,
